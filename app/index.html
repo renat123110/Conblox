@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="en" translate="no" class="notranslate">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="google" content="notranslate">
+    <meta name="robots" content="notranslate">
+    <title>Conblox Studio</title>
+    <!-- Favicon -->
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='20' fill='%2300a2ff'/><text x='50' y='68' font-size='55' font-weight='bold' text-anchor='middle' fill='white'>C</text></svg>">
+
+    <!-- Stylesheets -->
+    <link rel="stylesheet" href="css/codemirror.min.css">
+    <link rel="stylesheet" href="css/codemirror-dark.css">
+    <link rel="stylesheet" href="css/studio.css">
+
+    <!-- Vendor Libraries -->
+    <script src="js/vendor/three.min.js"></script>
+    <script src="js/vendor/OrbitControls.js"></script>
+    <script src="js/vendor/TransformControls.js"></script>
+    <script src="js/vendor/cannon.min.js"></script>
+    <script src="js/vendor/lucide.min.js"></script>
+    <script src="js/vendor/codemirror.min.js"></script>
+    <script src="js/vendor/codemirror-lua.js"></script>
+    <script src="js/vendor/codemirror-js.js"></script>
+</head>
+<body>
+    <div id="studio-root">
+        <!-- Top Ribbon Toolbar Container -->
+        <div id="studio-ribbon-container"></div>
+
+        <!-- Middle Body (Viewport + Explorer / Properties) -->
+        <div class="studio-body">
+            <!-- Central Viewport & Script Editor -->
+            <div class="center-viewport-area">
+                <!-- Tab bar -->
+                <div class="center-tabs-bar" id="center-tabs-bar">
+                    <div class="center-tab active" id="tab-viewport">
+                        <span>Place1</span>
+                        <i data-lucide="x" class="tab-close"></i>
+                    </div>
+                </div>
+
+                <!-- 3D Viewport Canvas Container -->
+                <div class="viewport-3d" id="viewport-3d"></div>
+
+                <!-- Embedded Code Editor -->
+                <div class="script-editor-container" id="script-editor-container"></div>
+            </div>
+
+            <!-- Right Dock: Explorer & Properties -->
+            <div class="right-dock" id="right-dock">
+                <!-- Explorer Panel -->
+                <div class="panel-container" id="panel-explorer-container">
+                    <div id="panel-explorer" class="panel-container"></div>
+                </div>
+
+                <!-- Resizer bar -->
+                <div class="panel-split" id="panel-split-right"></div>
+
+                <!-- Properties Panel -->
+                <div class="panel-container" id="panel-properties-container">
+                    <div id="panel-properties" class="panel-container"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Bottom Output Console -->
+        <div class="panel-output" id="panel-output"></div>
+    </div>
+
+    <script>
+        // Catch any errors early and display them visibly
+        window.addEventListener('error', function(e) {
+            console.error('GLOBAL ERROR:', e.message, e.filename, e.lineno);
+            var errBox = document.getElementById('debug-error-box');
+            if (!errBox) {
+                errBox = document.createElement('div');
+                errBox.id = 'debug-error-box';
+                errBox.style = 'position:fixed;bottom:10px;left:10px;z-index:99999;background:#e53935;color:white;padding:12px;font-family:monospace;border-radius:6px;max-width:80%;word-break:break-all;box-shadow:0 4px 16px rgba(0,0,0,0.5);';
+                document.body.appendChild(errBox);
+            }
+            errBox.innerHTML = '<b>Startup Error:</b> ' + e.message + '<br><small>' + (e.filename || '') + ':' + (e.lineno || '') + '</small>';
+        });
+
+        // Check if opened via file:// protocol
+        if (window.location.protocol === 'file:') {
+            window.addEventListener('DOMContentLoaded', function() {
+                var banner = document.createElement('div');
+                banner.style = 'position:fixed;top:0;left:0;right:0;bottom:0;background:#1e1e24;color:#f0f0f0;display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:999999;font-family:sans-serif;padding:20px;text-align:center;';
+                banner.innerHTML = '<div style=\"max-width:600px;background:#2b2d35;padding:30px;border-radius:10px;box-shadow:0 8px 30px rgba(0,0,0,0.7);border:1px solid #3d404d;\">' +
+                    '<h2 style=\"color:#00a2ff;margin-bottom:15px;\">Запуск Conblox Studio</h2>' +
+                    '<p style=\"margin-bottom:20px;font-size:14px;color:#ccc;line-height:1.6;\">Вы открыли файл напрямую через <code>file://</code>. Браузеры блокируют модули движка из соображений безопасности.</p>' +
+                    '<div style=\"background:#1b1c20;padding:15px;border-radius:6px;border-left:4px solid #00a2ff;text-align:left;margin-bottom:20px;\">' +
+                    '<p style=\"color:#fff;font-weight:bold;margin-bottom:5px;\">Как запустить правильно:</p>' +
+                    '<p style=\"color:#aaa;font-size:13px;\">Запустите файл <b>run_studio.bat</b> на рабочем столе в папке <b>Conblox</b>.<br>Он автоматически запустит локальный движок и откроет окно Studio.</p>' +
+                    '</div>' +
+                    '</div>';
+                document.body.appendChild(banner);
+            });
+        }
+    </script>
+
+    <script>
+        (() => {
+            const clientId = crypto.randomUUID();
+            const payload = JSON.stringify({ clientId });
+
+            fetch('/api/app/open', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: payload
+            }).catch(() => {});
+
+            window.addEventListener('pagehide', () => {
+                navigator.sendBeacon('/api/app/close', new Blob([payload], { type: 'application/json' }));
+            }, { once: true });
+        })();
+    </script>
+
+    <!-- Application Bootstrap -->
+    <script type="module">
+        import { StudioApp } from './js/studio/StudioApp.js';
+
+        function start() {
+            try {
+                console.log('[Conblox] Initializing StudioApp...');
+                const app = new StudioApp();
+                app.init();
+                console.log('[Conblox] StudioApp initialized successfully!');
+            } catch (err) {
+                console.error('[Conblox] Init error:', err);
+                const errBox = document.createElement('div');
+                errBox.style = 'position:fixed;top:10px;left:10px;z-index:99999;background:#b00020;color:white;padding:16px;font-family:monospace;border-radius:6px;max-width:80%;box-shadow:0 4px 20px rgba(0,0,0,0.8);';
+                errBox.innerHTML = '<h3>Failed to initialize Conblox Studio</h3><pre>' + (err.stack || err.message) + '</pre>';
+                document.body.appendChild(errBox);
+            }
+        }
+
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', start);
+        } else {
+            start();
+        }
+    </script>
+</body>
+</html>

@@ -1,0 +1,22 @@
+[Unit]
+Description=Conblox multiplayer game server
+After=network.target
+
+[Service]
+Type=simple
+User=conblox
+Group=conblox
+WorkingDirectory=/opt/conblox
+Environment=CONBLOX_HOST=127.0.0.1
+Environment=CONBLOX_PORT=28888
+ExecStart=/usr/bin/python3 /opt/conblox/server.py
+Restart=on-failure
+RestartSec=3
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=strict
+ReadWritePaths=/opt/conblox/places
+
+[Install]
+WantedBy=multi-user.target
