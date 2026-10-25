@@ -4,7 +4,7 @@
  */
 
 import { Part, SpawnLocation } from '../engine/BasePart.js';
-import { Model, Folder, Script, LocalScript, PointLight, Humanoid, BloomEffect, Atmosphere, DepthOfFieldEffect, SunRaysEffect, Sky, SkyBox, Clouds, Decal, Texture, Sound, Weld, WeldConstraint, WeldConstant, Motor6D } from '../engine/OtherInstances.js';
+import { Model, Folder, Tool, Script, LocalScript, PointLight, SpotLight, SurfaceLight, Humanoid, BloomEffect, Atmosphere, DepthOfFieldEffect, SunRaysEffect, Sky, SkyBox, Clouds, Decal, Texture, Sound, Weld, WeldConstraint, WeldConstant, Motor6D } from '../engine/OtherInstances.js';
 import { TemplateManager } from './TemplateManager.js';
 import { Vector3, Color3 } from '../engine/Math3D.js';
 
@@ -202,6 +202,8 @@ export class ExplorerUI {
                 { name: 'Script', icon: 'file-code', create: () => this.createScriptIn(targetInst) },
                 { name: 'LocalScript', icon: 'file-terminal', create: () => this.createLocalScriptIn(targetInst) },
                 { name: 'PointLight', icon: 'lightbulb', create: () => this.createLightIn(targetInst) },
+                { name: 'SpotLight', icon: 'flashlight', create: () => this.createSpotLightIn(targetInst) },
+                { name: 'SurfaceLight', icon: 'sun', create: () => this.createSurfaceLightIn(targetInst) },
                 { name: 'SkyBox', icon: 'cloud-sun', create: () => this.createSkyIn(targetInst) },
                 { name: 'Clouds', icon: 'cloud', create: () => this.createCloudsIn(targetInst) },
                 { name: 'Atmosphere', icon: 'wind', create: () => this.createAtmosphereIn(targetInst) },
@@ -211,9 +213,11 @@ export class ExplorerUI {
                 { name: 'Sky', icon: 'cloud-sun', create: () => this.createSkyIn(targetInst) },
                 { name: 'Folder', icon: 'folder', create: () => this.createFolderIn(targetInst) },
                 { name: 'Model', icon: 'package', create: () => this.createModelIn(targetInst) },
+                { name: 'Tool', icon: 'wrench', create: () => this.createToolIn(targetInst) },
                 { name: 'Humanoid', icon: 'user', create: () => this.createHumanoidIn(targetInst) },
                 { name: 'Weld', icon: 'link', create: () => this.createWeldIn(targetInst) },
                 { name: 'WeldConstraint', icon: 'link-2', create: () => this.createWeldConstraintIn(targetInst) },
+                { name: 'WeldConstant', icon: 'link-2', create: () => this.createWeldConstantIn(targetInst) },
                 { name: 'Motor6D', icon: 'rotate-cw', create: () => this.createMotor6DIn(targetInst) }
             );
         }
@@ -323,6 +327,26 @@ export class ExplorerUI {
         return l;
     }
 
+    createSpotLightIn(parent) {
+        const light = new SpotLight();
+        light.Parent = parent;
+        this.expandNode(parent);
+        this.setSelected(light);
+        if (this.onSelect) this.onSelect(light);
+        window.conbloxStudio?.historyManager?.recordState();
+        return light;
+    }
+
+    createSurfaceLightIn(parent) {
+        const light = new SurfaceLight();
+        light.Parent = parent;
+        this.expandNode(parent);
+        this.setSelected(light);
+        if (this.onSelect) this.onSelect(light);
+        window.conbloxStudio?.historyManager?.recordState();
+        return light;
+    }
+
     createFolderIn(parent) {
         const f = new Folder();
         f.Parent = parent;
@@ -341,6 +365,16 @@ export class ExplorerUI {
         if (this.onSelect) this.onSelect(m);
         window.conbloxStudio?.historyManager?.recordState();
         return m;
+    }
+
+    createToolIn(parent) {
+        const tool = new Tool();
+        tool.Parent = parent;
+        this.expandNode(parent);
+        this.setSelected(tool);
+        if (this.onSelect) this.onSelect(tool);
+        window.conbloxStudio?.historyManager?.recordState();
+        return tool;
     }
 
     createHumanoidIn(parent) {
@@ -373,6 +407,16 @@ export class ExplorerUI {
         if (this.onSelect) this.onSelect(wc);
         window.conbloxStudio?.historyManager?.recordState();
         return wc;
+    }
+
+    createWeldConstantIn(parent) {
+        const weld = new WeldConstant();
+        weld.Parent = parent;
+        this.expandNode(parent);
+        this.setSelected(weld);
+        if (this.onSelect) this.onSelect(weld);
+        window.conbloxStudio?.historyManager?.recordState();
+        return weld;
     }
 
     createMotor6DIn(parent) {
@@ -562,6 +606,8 @@ export class ExplorerUI {
             case 'Script': return 'file-code';
             case 'LocalScript': return 'file-terminal';
             case 'PointLight': return 'lightbulb';
+            case 'SpotLight': return 'flashlight';
+            case 'SurfaceLight': return 'sun';
             case 'Humanoid': return 'user';
             case 'BloomEffect': return 'sparkles';
             case 'Atmosphere': return 'wind';

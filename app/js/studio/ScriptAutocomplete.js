@@ -93,6 +93,8 @@ export class ScriptAutocomplete {
             { label: 'Folder', kind: 'class', insert: 'Folder', type: 'Folder', desc: 'Organizational container without physical properties.' },
             { label: 'Script', kind: 'class', insert: 'Script', type: 'Script', desc: 'Luau script execution unit.' },
             { label: 'PointLight', kind: 'class', insert: 'PointLight', type: 'PointLight', desc: 'Omnidirectional point light source.' },
+            { label: 'SpotLight', kind: 'class', insert: 'SpotLight', type: 'SpotLight', desc: 'Directional cone light attached to a part face.' },
+            { label: 'SurfaceLight', kind: 'class', insert: 'SurfaceLight', type: 'SurfaceLight', desc: 'Broad directional light emitted from a part face.' },
             { label: 'Clouds', kind: 'class', insert: 'Clouds', type: 'Clouds', desc: 'Volumetric dynamic sky clouds.' },
             { label: 'Sound', kind: 'class', insert: 'Sound', type: 'Sound', desc: 'Audio sound source object.' },
             { label: 'Humanoid', kind: 'class', insert: 'Humanoid', type: 'Humanoid', desc: 'Controls character movement, health, and animations.' },

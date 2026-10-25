@@ -1,7 +1,7 @@
 {
   "version": "1.0.0",
   "name": "baseplate.cblx",
-  "timestamp": "2026-10-22T18:04:18.362Z",
+  "timestamp": "2026-10-25T22:31:16.028Z",
   "dataModel": {
     "id": "inst_1_0povau",
     "name": "game",
@@ -21,7 +21,7 @@
         "properties": {},
         "children": [
           {
-            "id": "inst_506_vggz0i",
+            "id": "inst_33_7ptqj0",
             "name": "Terrain",
             "className": "Terrain",
             "archivable": true,
@@ -52,7 +52,7 @@
             ]
           },
           {
-            "id": "inst_507_mpeijj",
+            "id": "inst_34_v5d7no",
             "name": "Camera",
             "className": "Camera",
             "archivable": true,
@@ -85,6 +85,8 @@
               },
               "fieldOfView": 73,
               "cameraType": "Custom",
+              "cameraSubjectId": null,
+              "cameraSubjectName": null,
               "headLocked": true
             },
             "children": []

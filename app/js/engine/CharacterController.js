@@ -17,7 +17,7 @@
 import { Vector3, Color3 } from './Math3D.js';
 import { Instance } from './Instance.js';
 import { Signal } from './Signal.js';
-import { Model, Humanoid, Decal, Motor6D } from './OtherInstances.js';
+import { Model, Folder, Tool, Humanoid, Decal, Motor6D } from './OtherInstances.js';
 import { Part } from './BasePart.js';
 import { nativeInputManager } from './NativeInputManager.js';
 
@@ -276,9 +276,21 @@ export class CharacterController {
                 localPlayer.Parent = this.dataModel.Players;
                 this.dataModel.Players.LocalPlayer = localPlayer;
             }
-            this.dataModel.Players.LocalPlayer.Character = char;
-            if (this.dataModel.Players.LocalPlayer.CharacterAdded) {
-                this.dataModel.Players.LocalPlayer.CharacterAdded.Fire(char);
+            const localPlayer = this.dataModel.Players.LocalPlayer;
+            let backpack = localPlayer.FindFirstChild('Backpack');
+            if (!backpack) {
+                backpack = new Folder();
+                backpack.Name = 'Backpack';
+                backpack.Parent = localPlayer;
+            }
+            for (const item of this.dataModel.StarterPack.GetChildren()) {
+                if (!item.IsA('Tool')) continue;
+                const clonedTool = item.Clone();
+                if (clonedTool) clonedTool.Parent = backpack;
+            }
+            localPlayer.Character = char;
+            if (localPlayer.CharacterAdded) {
+                localPlayer.CharacterAdded.Fire(char);
             }
         }
 
@@ -907,6 +919,11 @@ export class CharacterController {
         }
         if (this.parts.rightArm) {
             syncTransform(this.parts.rightArm, worldPos(1.5, 0.5, 0));
+        }
+        if (this.character) {
+            for (const tool of this.character.GetChildren().filter(child => child.IsA('Tool'))) {
+                tool.updateGrip();
+            }
         }
         if (this.parts.leftLeg) {
             syncTransform(this.parts.leftLeg, worldPos(-0.5, -1.5, 0));

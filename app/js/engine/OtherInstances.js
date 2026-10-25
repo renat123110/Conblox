@@ -13,6 +13,83 @@ export class Folder extends Instance {
     }
 }
 
+export class Tool extends Instance {
+    constructor() {
+        super('Tool');
+        this.requiresHandle = true;
+        this._grip = null;
+    }
+
+    get RequiresHandle() { return this.requiresHandle; }
+    set RequiresHandle(value) {
+        this.requiresHandle = Boolean(value);
+        this.Changed.Fire('RequiresHandle', this.requiresHandle);
+    }
+
+    get Handle() {
+        const handle = this.FindFirstChild('Handle');
+        return handle && handle.IsA('BasePart') ? handle : null;
+    }
+
+    get CanBeEquipped() {
+        return !this.RequiresHandle || Boolean(this.Handle);
+    }
+
+    Equip(character) {
+        const handle = this.Handle;
+        if (!character || (this.RequiresHandle && !handle)) return false;
+        const arm = character.FindFirstChild('Right Arm') || character.FindFirstChild('RightHand');
+        if (!arm) return false;
+
+        this.Unequip();
+        if (!handle) return true;
+        const grip = new Motor6D();
+        grip.Name = 'RightGrip';
+        grip.Part0 = arm;
+        grip.Part1 = handle;
+        grip.C0 = new CFrame(new Vector3(0, -0.75, -0.3));
+        grip.Parent = arm;
+        this._grip = {
+            arm,
+            handle,
+            joint: grip,
+            anchored: handle.Anchored,
+            canCollide: handle.CanCollide
+        };
+        handle.Anchored = true;
+        handle.CanCollide = false;
+        this.updateGrip();
+        return true;
+    }
+
+    updateGrip() {
+        if (!this._grip) return;
+        const { arm, handle, joint } = this._grip;
+        if (!arm.Parent || !handle.Parent || !joint.Parent) {
+            this.Unequip();
+            return;
+        }
+        handle.Position = arm.CFrame.PointToWorldSpace(joint.C0.Position);
+        handle.Orientation = arm.Orientation;
+    }
+
+    Unequip() {
+        if (!this._grip) return;
+        this._grip.joint.Destroy();
+        this._grip.handle.Anchored = this._grip.anchored;
+        this._grip.handle.CanCollide = this._grip.canCollide;
+        this._grip = null;
+    }
+
+    serializeProperties() {
+        return { requiresHandle: this.requiresHandle };
+    }
+
+    deserializeProperties(props) {
+        if (props.requiresHandle !== undefined) this.requiresHandle = Boolean(props.requiresHandle);
+    }
+}
+
 export class Model extends Instance {
     constructor() {
         super('Model');
@@ -108,9 +185,9 @@ export class LocalScript extends Script {
     }
 }
 
-export class PointLight extends Instance {
-    constructor() {
-        super('PointLight');
+class LightBase extends Instance {
+    constructor(className) {
+        super(className);
         this.color = Color3.fromRGB(255, 255, 255);
         this.brightness = 1;
         this.range = 16;
@@ -164,6 +241,55 @@ export class PointLight extends Instance {
         if (props.range !== undefined) this.range = props.range;
         if (props.shadows !== undefined) this.shadows = props.shadows;
         if (props.enabled !== undefined) this.enabled = props.enabled;
+    }
+}
+
+export class PointLight extends LightBase {
+    constructor() {
+        super('PointLight');
+    }
+}
+
+class FaceLight extends LightBase {
+    constructor(className, angle) {
+        super(className);
+        this.face = 'Front';
+        this.angle = angle;
+    }
+
+    get Face() { return this.face; }
+    set Face(value) {
+        this.face = String(value || 'Front');
+        this.Changed.Fire('Face', this.face);
+    }
+
+    get Angle() { return this.angle; }
+    set Angle(value) {
+        const angle = Number(value);
+        this.angle = Number.isFinite(angle) ? Math.max(0, Math.min(180, angle)) : 45;
+        this.Changed.Fire('Angle', this.angle);
+    }
+
+    serializeProperties() {
+        return { ...super.serializeProperties(), face: this.face, angle: this.angle };
+    }
+
+    deserializeProperties(props) {
+        super.deserializeProperties(props);
+        if (props.face !== undefined) this.face = String(props.face);
+        if (props.angle !== undefined) this.Angle = props.angle;
+    }
+}
+
+export class SpotLight extends FaceLight {
+    constructor() {
+        super('SpotLight', 45);
+    }
+}
+
+export class SurfaceLight extends FaceLight {
+    constructor() {
+        super('SurfaceLight', 90);
     }
 }
 
@@ -1179,10 +1305,13 @@ export class Terrain extends Instance {
 }
 
 Instance.register('Folder', Folder);
+Instance.register('Tool', Tool);
 Instance.register('Model', Model);
 Instance.register('Script', Script);
 Instance.register('LocalScript', LocalScript);
 Instance.register('PointLight', PointLight);
+Instance.register('SpotLight', SpotLight);
+Instance.register('SurfaceLight', SurfaceLight);
 Instance.register('Humanoid', Humanoid);
 Instance.register('BloomEffect', BloomEffect);
 Instance.register('Atmosphere', Atmosphere);

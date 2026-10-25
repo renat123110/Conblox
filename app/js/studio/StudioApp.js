@@ -24,6 +24,7 @@ import { ScriptEditorUI } from './ScriptEditorUI.js';
 import { HistoryManager } from './HistoryManager.js';
 import { TemplateManager } from './TemplateManager.js';
 import { SettingsUI } from './SettingsUI.js';
+import { BackpackUI } from './BackpackUI.js';
 import { nativeInputManager } from '../engine/NativeInputManager.js';
 
 export class StudioApp {
@@ -42,6 +43,7 @@ export class StudioApp {
         this.scriptRunner = null;
         this.historyManager = null;
         this.settingsUI = null;
+        this.backpackUI = null;
 
         this.selectedInstance = null;
         this.simulationState = 'Edit'; // 'Edit', 'Play', 'Run'
@@ -126,6 +128,7 @@ export class StudioApp {
         this.physicsEngine = new PhysicsEngine(this.dataModel);
         this.characterController = new CharacterController(this.dataModel, this.physicsEngine, this.soundEngine, this.viewport);
         this.viewport.characterController = this.characterController;
+        this.backpackUI = new BackpackUI(viewportContainer, (tool) => this.toggleTool(tool));
         this.multiplayerClient = new MultiplayerClient(this);
         this.scriptRunner = new ScriptRunner(this.dataModel, this.outputUI);
 
@@ -414,6 +417,7 @@ export class StudioApp {
 
     selectInstance(inst, multiInstances = null) {
         this.selectedInstance = inst;
+        this.viewport?.setSelectedLight(inst && ['SpotLight', 'SurfaceLight'].includes(inst.ClassName) ? inst : null);
         if (multiInstances && multiInstances.length > 1) {
             if (this.explorerUI) {
                 this.explorerUI.selectedInstances = new Set(multiInstances);
@@ -819,6 +823,8 @@ export class StudioApp {
             this.viewport.setPlayMode(true);
             this.gizmoManager.detach();
             this.characterController.spawn(mode === 'TestHere' ? this.viewport.cameraPos : null);
+            this.backpackUI.setPlayer(this.dataModel.Players.LocalPlayer, this.characterController.character);
+            this.backpackUI.setVisible(true);
             this.showPlayHUD();
             this.multiplayerClient.mountControls();
         }
@@ -862,6 +868,8 @@ export class StudioApp {
         if (this.multiplayerClient.panel) this.multiplayerClient.panel.hidden = true;
 
         this.viewport.setPlayMode(false);
+        this.backpackUI.setVisible(false);
+        this.backpackUI.setPlayer(null);
         this.hidePlayHUD();
 
         // 0. Restore camera to pre-simulation position & angles immediately
@@ -936,6 +944,28 @@ export class StudioApp {
         this.viewport.syncAllParts();
         this.explorerUI.render();
         this.selectInstance(null);
+    }
+
+    toggleTool(tool) {
+        const player = this.dataModel?.Players?.LocalPlayer;
+        const character = player?.Character;
+        const backpack = player?.FindFirstChild('Backpack');
+        if (!tool || !character || !backpack) return;
+
+        const equippedTools = character.GetChildren().filter(child => child.IsA('Tool'));
+        if (tool.Parent === character) {
+            tool.Unequip();
+            tool.Parent = backpack;
+            return;
+        }
+        if (tool.Parent !== backpack || !tool.CanBeEquipped) return;
+
+        for (const equipped of equippedTools) {
+            equipped.Unequip();
+            equipped.Parent = backpack;
+        }
+        tool.Parent = character;
+        if (!tool.Equip(character)) tool.Parent = backpack;
     }
 
     toggleSimulationPause() {

@@ -6,6 +6,52 @@
 import { Vector3, Color3, CFrame } from '../engine/Math3D.js';
 import { nativeInputManager } from '../engine/NativeInputManager.js';
 
+const LIGHT_CLASSES = new Set(['PointLight', 'SpotLight', 'SurfaceLight']);
+const LIGHT_FACE_DIRECTIONS = {
+    Front: new THREE.Vector3(0, 0, -1),
+    Back: new THREE.Vector3(0, 0, 1),
+    Top: new THREE.Vector3(0, 1, 0),
+    Bottom: new THREE.Vector3(0, -1, 0),
+    Left: new THREE.Vector3(-1, 0, 0),
+    Right: new THREE.Vector3(1, 0, 0)
+};
+
+function createBeamVertices(lightInst) {
+    const range = Math.max(0.1, Number(lightInst.Range) || 16);
+    const rawAngle = Number(lightInst.Angle);
+    const fullAngle = (Number.isFinite(rawAngle) ? rawAngle : 90) * Math.PI / 180;
+    const halfAngle = Math.min(Math.PI * 0.495, Math.max(0, fullAngle / 2));
+    const points = [];
+    const origin = new THREE.Vector3();
+    const addSegment = (start, end) => points.push(start, end);
+
+    if (lightInst.ClassName === 'SurfaceLight') {
+        const halfWidth = Math.tan(halfAngle) * range;
+        const corners = [
+            new THREE.Vector3(-halfWidth, -halfWidth, -range),
+            new THREE.Vector3(halfWidth, -halfWidth, -range),
+            new THREE.Vector3(halfWidth, halfWidth, -range),
+            new THREE.Vector3(-halfWidth, halfWidth, -range)
+        ];
+        for (let index = 0; index < corners.length; index++) {
+            addSegment(origin, corners[index]);
+            addSegment(corners[index], corners[(index + 1) % corners.length]);
+        }
+    } else {
+        const segments = 32;
+        let previous = null;
+        for (let index = 0; index <= segments; index++) {
+            const angle = (index / segments) * Math.PI * 2;
+            const point = new THREE.Vector3(Math.cos(angle) * Math.tan(halfAngle) * range, Math.sin(angle) * Math.tan(halfAngle) * range, -range);
+            addSegment(origin, point);
+            if (previous) addSegment(previous, point);
+            previous = point;
+        }
+    }
+
+    return points;
+}
+
 export class Viewport {
     constructor(containerEl, dataModel) {
         this.container = containerEl;
@@ -22,8 +68,9 @@ export class Viewport {
         this.partMeshes = new Map();
         this.meshParts = new Map();
 
-        // PointLight mapping: PointLight -> { light: THREE.PointLight, helper: THREE.Mesh }
+        // Light instance mapping: light object -> Three.js light and optional helper mesh
         this.pointLights = new Map();
+        this.selectedLight = null;
 
         // Selection box & outline
         this.selectionBox = null;
@@ -186,7 +233,7 @@ export class Viewport {
         ws.DescendantAdded.Connect((inst) => {
             if (inst.IsA && inst.IsA('BasePart')) {
                 this.syncPartMesh(inst);
-            } else if (inst.ClassName === 'PointLight') {
+            } else if (LIGHT_CLASSES.has(inst.ClassName)) {
                 this.syncPointLight(inst);
             } else if (inst.ClassName === 'Clouds') {
                 inst.Changed.Connect(() => this.syncClouds());
@@ -205,7 +252,7 @@ export class Viewport {
         ws.DescendantRemoved.Connect((inst) => {
             if (inst.IsA && inst.IsA('BasePart')) {
                 this.removePartMesh(inst);
-            } else if (inst.ClassName === 'PointLight') {
+            } else if (LIGHT_CLASSES.has(inst.ClassName)) {
                 this.removePointLight(inst);
             } else if (inst.ClassName === 'Clouds') {
                 this.syncClouds();
@@ -2169,7 +2216,7 @@ export class Viewport {
                         this.syncDecalOverlays(part, mesh);
                     });
                     this.syncDecalOverlays(part, mesh);
-                } else if (child.ClassName === 'PointLight') {
+                } else if (LIGHT_CLASSES.has(child.ClassName)) {
                     this.syncPointLight(child);
                 }
             });
@@ -2181,7 +2228,7 @@ export class Viewport {
 
             if (part.GetChildren) {
                 for (const child of part.GetChildren()) {
-                    if (child.ClassName === 'PointLight') {
+                    if (LIGHT_CLASSES.has(child.ClassName)) {
                         this.syncPointLight(child);
                     } else if (child.ClassName === 'Decal' || child.ClassName === 'Texture') {
                         child.Changed?.Connect(() => {
@@ -2287,7 +2334,7 @@ export class Viewport {
         }
 
         // Sync PointLights
-        const lights = ws.GetDescendants().filter(i => i.ClassName === 'PointLight');
+        const lights = ws.GetDescendants().filter(i => LIGHT_CLASSES.has(i.ClassName));
         const currentLightSet = new Set(lights);
         for (const [l] of this.pointLights.entries()) {
             if (!currentLightSet.has(l)) {
@@ -2310,7 +2357,7 @@ export class Viewport {
     }
 
     syncPointLight(lightInst) {
-        if (!lightInst || lightInst.ClassName !== 'PointLight') return;
+        if (!lightInst || !LIGHT_CLASSES.has(lightInst.ClassName)) return;
 
         let entry = this.pointLights.get(lightInst);
         if (!entry) {
@@ -2319,7 +2366,11 @@ export class Viewport {
             const intensity = Math.max(0, Number(lightInst.Brightness) || 1) * 3.5;
             const distance = Math.max(0.1, Number(lightInst.Range) || 16);
 
-            const threeLight = new THREE.PointLight(threeColor, intensity, distance, 1.5);
+            const isPointLight = lightInst.ClassName === 'PointLight';
+            const angle = Math.max(0.01, Math.min(Math.PI / 2, (Number(lightInst.Angle ?? 90) * Math.PI / 180) / 2));
+            const threeLight = isPointLight
+                ? new THREE.PointLight(threeColor, intensity, distance, 1.5)
+                : new THREE.SpotLight(threeColor, intensity, distance, angle, 0.4, 1.5);
             threeLight.castShadow = Boolean(lightInst.Shadows);
             threeLight.shadow.mapSize.width = 1024;
             threeLight.shadow.mapSize.height = 1024;
@@ -2329,12 +2380,31 @@ export class Viewport {
             threeLight.visible = (lightInst.Enabled !== false);
 
             // Glowing Light Bulb Core (emits HDR bloom)
-            const helperGeo = new THREE.SphereGeometry(0.35, 12, 12);
-            const helperMat = new THREE.MeshBasicMaterial({ color: threeColor.clone().multiplyScalar(5.5) });
-            const helper = new THREE.Mesh(helperGeo, helperMat);
-            threeLight.add(helper);
+            let helper = null;
+            if (isPointLight) {
+                const helperGeo = new THREE.SphereGeometry(0.35, 12, 12);
+                const helperMat = new THREE.MeshBasicMaterial({ color: threeColor.clone().multiplyScalar(5.5) });
+                helper = new THREE.Mesh(helperGeo, helperMat);
+                threeLight.add(helper);
+            }
 
-            entry = { light: threeLight, helper };
+            let outline = null;
+            if (!isPointLight) {
+                const geometry = new THREE.BufferGeometry();
+                geometry.setFromPoints(createBeamVertices(lightInst));
+                const material = new THREE.LineBasicMaterial({
+                    color: threeColor,
+                    transparent: true,
+                    opacity: 0.72,
+                    depthTest: false,
+                    depthWrite: false
+                });
+                outline = new THREE.LineSegments(geometry, material);
+                outline.renderOrder = 999;
+                outline.visible = Boolean(lightInst.Enabled && this.selectedLight === lightInst);
+            }
+
+            entry = { light: threeLight, helper, outline, hostPart: null, hostPartConnection: null };
             this.pointLights.set(lightInst, entry);
 
             this.attachPointLightToHierarchy(lightInst, entry);
@@ -2352,9 +2422,11 @@ export class Viewport {
         const threeLight = entry.light;
 
         let p = lightInst.Parent;
+        let hostPart = null;
         let parentMesh = null;
         while (p) {
             if (p.IsA && p.IsA('BasePart')) {
+                hostPart = p;
                 parentMesh = this.partMeshes.get(p);
                 break;
             }
@@ -2373,6 +2445,69 @@ export class Viewport {
                 this.scene.add(threeLight);
                 const pos = lightInst.Parent?.Position || new Vector3(0, 5, 0);
                 threeLight.position.set(pos.x, pos.y, pos.z);
+            }
+        }
+
+        if (entry.outline) {
+            if (parentMesh) {
+                if (entry.outline.parent !== parentMesh) {
+                    if (entry.outline.parent) entry.outline.parent.remove(entry.outline);
+                    parentMesh.add(entry.outline);
+                }
+                entry.outline.position.set(0, 0, 0);
+            } else {
+                if (entry.outline.parent !== this.scene) {
+                    if (entry.outline.parent) entry.outline.parent.remove(entry.outline);
+                    this.scene.add(entry.outline);
+                }
+                entry.outline.position.copy(threeLight.position);
+            }
+            this.updateDirectionalOutline(lightInst, entry, false);
+        }
+
+        if (entry.hostPart !== hostPart) {
+            entry.hostPartConnection?.Disconnect();
+            entry.hostPart = hostPart;
+            entry.hostPartConnection = hostPart?.Changed.Connect((prop) => {
+                if (prop === 'Position' || prop === 'Orientation') this.updateSpotTarget(lightInst, entry);
+            }) || null;
+        }
+        this.updateSpotTarget(lightInst, entry);
+    }
+
+    updateSpotTarget(lightInst, entry) {
+        if (!entry.light.isSpotLight) return;
+        const direction = LIGHT_FACE_DIRECTIONS[lightInst.Face] || LIGHT_FACE_DIRECTIONS.Front;
+        entry.light.updateWorldMatrix(true, false);
+        const worldDirection = direction.clone().transformDirection(entry.light.matrixWorld);
+        const worldOrigin = entry.light.getWorldPosition(new THREE.Vector3());
+        entry.light.target.position.copy(worldOrigin).addScaledVector(worldDirection, Math.max(1, Number(lightInst.Range) || 16));
+        entry.light.target.updateMatrixWorld(true);
+        if (entry.light.target.parent !== this.scene) this.scene.add(entry.light.target);
+    }
+
+    updateDirectionalOutline(lightInst, entry, rebuild = true) {
+        const outline = entry.outline;
+        if (!outline) return;
+
+        if (rebuild) {
+            outline.geometry.dispose();
+            outline.geometry = new THREE.BufferGeometry();
+            outline.geometry.setFromPoints(createBeamVertices(lightInst));
+        }
+
+        const faceDirection = LIGHT_FACE_DIRECTIONS[lightInst.Face] || LIGHT_FACE_DIRECTIONS.Front;
+        outline.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, -1), faceDirection);
+        outline.visible = Boolean(lightInst.Enabled && this.selectedLight === lightInst);
+        const rgb = lightInst.Color?.toRGB?.() || { r: 255, g: 255, b: 255 };
+        outline.material.color.setRGB(rgb.r / 255, rgb.g / 255, rgb.b / 255);
+    }
+
+    setSelectedLight(lightInst) {
+        this.selectedLight = lightInst || null;
+        for (const [instance, entry] of this.pointLights) {
+            if (entry.outline) {
+                entry.outline.visible = Boolean(instance === this.selectedLight && instance.Enabled);
             }
         }
     }
@@ -2397,6 +2532,14 @@ export class Viewport {
         if (!prop || prop === 'Range') {
             threeLight.distance = Math.max(0.1, Number(lightInst.Range) || 16);
         }
+        if (!prop || prop === 'Angle') {
+            if (threeLight.isSpotLight) {
+                threeLight.angle = Math.max(0.01, Math.min(Math.PI / 2, (Number(lightInst.Angle) * Math.PI / 180) / 2));
+            }
+        }
+        if ((!prop || prop === 'Face') && threeLight.isSpotLight) {
+            this.updateSpotTarget(lightInst, entry);
+        }
         if (!prop || prop === 'Shadows') {
             threeLight.castShadow = Boolean(lightInst.Shadows);
         }
@@ -2405,6 +2548,10 @@ export class Viewport {
         }
         if (!prop || prop === 'Parent') {
             this.attachPointLightToHierarchy(lightInst, entry);
+        }
+
+        if (entry.outline) {
+            this.updateDirectionalOutline(lightInst, entry, !prop || prop === 'Range' || prop === 'Angle');
         }
 
         if (helper) {
@@ -2423,6 +2570,13 @@ export class Viewport {
                 entry.helper.geometry.dispose();
                 entry.helper.material.dispose();
             }
+            if (entry.outline) {
+                if (entry.outline.parent) entry.outline.parent.remove(entry.outline);
+                entry.outline.geometry.dispose();
+                entry.outline.material.dispose();
+            }
+            entry.hostPartConnection?.Disconnect();
+            if (threeLight.target?.parent) threeLight.target.parent.remove(threeLight.target);
             threeLight.dispose?.();
             this.pointLights.delete(lightInst);
         }

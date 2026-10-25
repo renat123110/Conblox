@@ -201,9 +201,9 @@ export class PropertiesUI {
             ]);
         }
 
-        // 4. PointLight Category
-        if (inst.ClassName === 'PointLight') {
-            this.renderSection('PointLight', [
+        // 4. Light Categories
+        if (['PointLight', 'SpotLight', 'SurfaceLight'].includes(inst.ClassName)) {
+            const lightProperties = [
                 {
                     name: 'Color', type: 'color', value: inst.Color ? inst.Color.toHex() : '#ffffff',
                     set: (v, commit = false) => { inst.Color = Color3.fromHex(v); this.notifyChange(commit); }
@@ -215,7 +215,21 @@ export class PropertiesUI {
                 {
                     name: 'Range', type: 'number', value: inst.Range, min: 1, max: 100, step: 1,
                     set: (v) => { inst.Range = Number(v); this.notifyChange(); }
-                },
+                }
+            ];
+            if (inst.ClassName !== 'PointLight') {
+                lightProperties.push(
+                    {
+                        name: 'Face', type: 'select', options: ['Back', 'Bottom', 'Front', 'Left', 'Right', 'Top'], value: inst.Face,
+                        set: (v) => { inst.Face = v; this.notifyChange(); }
+                    },
+                    {
+                        name: 'Angle', type: 'number', value: inst.Angle, min: 0, max: 180, step: 1,
+                        set: (v) => { inst.Angle = Number(v); this.notifyChange(); }
+                    }
+                );
+            }
+            lightProperties.push(
                 {
                     name: 'Shadows', type: 'bool', value: inst.Shadows,
                     set: (v) => { inst.Shadows = Boolean(v); this.notifyChange(); }
@@ -224,7 +238,8 @@ export class PropertiesUI {
                     name: 'Enabled', type: 'bool', value: inst.Enabled,
                     set: (v) => { inst.Enabled = Boolean(v); this.notifyChange(); }
                 }
-            ]);
+            );
+            this.renderSection(inst.ClassName, lightProperties);
         }
 
         // 5. Script Category
@@ -540,28 +555,28 @@ export class PropertiesUI {
             const rows = [
                 {
                     name: 'Part0',
-                    type: 'string',
+                    type: 'instance_ref',
                     value: inst.Part0 ? inst.Part0.Name : '(None)',
+                    get: () => inst.Part0 ? inst.Part0.Name : '',
                     set: (v) => {
-                        if (!v || v === '(None)') {
+                        if (!v) {
                             inst.Part0 = null;
-                        } else {
-                            const found = allParts.find(p => p.Name === v || p.id === v);
-                            if (found) inst.Part0 = found;
+                        } else if (v.IsA && v.IsA('BasePart') && allParts.includes(v)) {
+                            inst.Part0 = v;
                         }
                         this.notifyChange();
                     }
                 },
                 {
                     name: 'Part1',
-                    type: 'string',
+                    type: 'instance_ref',
                     value: inst.Part1 ? inst.Part1.Name : '(None)',
+                    get: () => inst.Part1 ? inst.Part1.Name : '',
                     set: (v) => {
-                        if (!v || v === '(None)') {
+                        if (!v) {
                             inst.Part1 = null;
-                        } else {
-                            const found = allParts.find(p => p.Name === v || p.id === v);
-                            if (found) inst.Part1 = found;
+                        } else if (v.IsA && v.IsA('BasePart') && allParts.includes(v)) {
+                            inst.Part1 = v;
                         }
                         this.notifyChange();
                     }

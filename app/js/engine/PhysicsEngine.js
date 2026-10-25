@@ -11,6 +11,9 @@ export class PhysicsEngine {
         this.world = null;
         this.bodyMap = new Map(); // Part -> CANNON.Body
         this.reverseMap = new Map(); // CANNON.Body -> Part
+        this.jointConstraints = new Map();
+        this.joints = new Set();
+        this.jointConnections = new Map();
         this.running = false;
         this.gravityScale = 35; // Responsive Roblox feel
         this.isSyncing = false;
@@ -70,10 +73,14 @@ export class PhysicsEngine {
             this.descendantAddedConn = this.dataModel.Workspace.DescendantAdded.Connect((inst) => {
                 if (this.running && inst && inst.IsA && inst.IsA('BasePart')) {
                     this.addPart(inst);
+                } else if (this.running && this.isWeldJoint(inst)) {
+                    this.addJoint(inst);
                 }
             });
             this.descendantRemovedConn = this.dataModel.Workspace.DescendantRemoved.Connect((inst) => {
-                if (inst && inst.IsA && inst.IsA('BasePart')) {
+                if (this.isWeldJoint(inst)) {
+                    this.removeJoint(inst);
+                } else if (inst && inst.IsA && inst.IsA('BasePart')) {
                     this.removePart(inst);
                 }
             });
@@ -95,6 +102,7 @@ export class PhysicsEngine {
 
     clear() {
         if (!this.world) return;
+        for (const joint of [...this.joints]) this.removeJoint(joint);
         for (const [part, body] of this.bodyMap.entries()) {
             this.world.removeBody(body);
         }
@@ -111,6 +119,109 @@ export class PhysicsEngine {
         for (const part of parts) {
             this.addPart(part);
         }
+        for (const joint of workspace.GetDescendants().filter(inst => this.isWeldJoint(inst))) {
+            this.addJoint(joint);
+        }
+    }
+
+    isWeldJoint(inst) {
+        return inst && ['Weld', 'WeldConstraint', 'WeldConstant'].includes(inst.ClassName);
+    }
+
+    addJoint(joint) {
+        this.joints.add(joint);
+        if (!this.jointConnections.has(joint)) {
+            const connection = joint.Changed.Connect((property) => {
+                if (['Part0', 'Part1', 'Enabled', 'C0', 'C1'].includes(property)) {
+                    this.syncJoint(joint);
+                }
+            });
+            this.jointConnections.set(joint, connection);
+        }
+        this.syncJoint(joint);
+    }
+
+    syncJoint(joint) {
+        this.removeJointConstraint(joint);
+        if (!this.world || !joint.Enabled || !joint.Part0 || !joint.Part1 || joint.Part0 === joint.Part1) return;
+
+        const body0 = this.bodyMap.get(joint.Part0);
+        const body1 = this.bodyMap.get(joint.Part1);
+        if (!body0 || !body1 || (body0.mass === 0 && body1.mass === 0)) return;
+
+        if (joint.ClassName === 'Weld') {
+            this.alignWeldParts(joint, body0, body1);
+        }
+
+        const constraint = new CANNON.LockConstraint(body0, body1, { maxForce: 1e6 });
+        this.world.addConstraint(constraint);
+        this.jointConstraints.set(joint, constraint);
+    }
+
+    alignWeldParts(joint, body0, body1) {
+        const quaternionFromOrientation = (orientation) => new THREE.Quaternion().setFromEuler(new THREE.Euler(
+            orientation.x * Math.PI / 180,
+            orientation.y * Math.PI / 180,
+            orientation.z * Math.PI / 180,
+            'XYZ'
+        ));
+        const body0Quaternion = new THREE.Quaternion(body0.quaternion.x, body0.quaternion.y, body0.quaternion.z, body0.quaternion.w);
+        const body1Quaternion = new THREE.Quaternion(body1.quaternion.x, body1.quaternion.y, body1.quaternion.z, body1.quaternion.w);
+        const c0 = joint.C0 || { position: new Vector3(), orientation: new Vector3() };
+        const c1 = joint.C1 || { position: new Vector3(), orientation: new Vector3() };
+        const c0Quaternion = quaternionFromOrientation(c0.orientation);
+        const c1Quaternion = quaternionFromOrientation(c1.orientation);
+        const c0Position = new THREE.Vector3(c0.position.x, c0.position.y, c0.position.z);
+        const c1Position = new THREE.Vector3(c1.position.x, c1.position.y, c1.position.z);
+        let targetBody;
+        let targetQuaternion;
+        let targetPosition;
+
+        if (body1.mass > 0 || body0.mass === 0) {
+            targetBody = body1;
+            targetQuaternion = body0Quaternion.clone().multiply(c0Quaternion).multiply(c1Quaternion.clone().invert());
+            targetPosition = new THREE.Vector3(body0.position.x, body0.position.y, body0.position.z)
+                .add(c0Position.clone().applyQuaternion(body0Quaternion))
+                .sub(c1Position.clone().applyQuaternion(targetQuaternion));
+        } else {
+            targetBody = body0;
+            targetQuaternion = body1Quaternion.clone().multiply(c1Quaternion).multiply(c0Quaternion.clone().invert());
+            targetPosition = new THREE.Vector3(body1.position.x, body1.position.y, body1.position.z)
+                .add(c1Position.clone().applyQuaternion(body1Quaternion))
+                .sub(c0Position.clone().applyQuaternion(targetQuaternion));
+        }
+
+        targetBody.position.set(targetPosition.x, targetPosition.y, targetPosition.z);
+        targetBody.quaternion.set(targetQuaternion.x, targetQuaternion.y, targetQuaternion.z, targetQuaternion.w);
+        targetBody.velocity.set(0, 0, 0);
+        targetBody.angularVelocity.set(0, 0, 0);
+        targetBody.wakeUp();
+
+        const part = this.reverseMap.get(targetBody);
+        if (part) {
+            const euler = new THREE.Euler().setFromQuaternion(targetQuaternion, 'XYZ');
+            this.isSyncing = true;
+            try {
+                part.Position = new Vector3(targetPosition.x, targetPosition.y, targetPosition.z);
+                part.Orientation = new Vector3(euler.x * 180 / Math.PI, euler.y * 180 / Math.PI, euler.z * 180 / Math.PI);
+            } finally {
+                this.isSyncing = false;
+            }
+        }
+    }
+
+    removeJointConstraint(joint) {
+        const constraint = this.jointConstraints.get(joint);
+        if (constraint && this.world) this.world.removeConstraint(constraint);
+        this.jointConstraints.delete(joint);
+    }
+
+    removeJoint(joint) {
+        this.removeJointConstraint(joint);
+        const connection = this.jointConnections.get(joint);
+        connection?.Disconnect();
+        this.jointConnections.delete(joint);
+        this.joints.delete(joint);
     }
 
     attachShapeToBody(body, part) {
@@ -197,9 +308,15 @@ export class PhysicsEngine {
         this.world.addBody(body);
         this.bodyMap.set(part, body);
         this.reverseMap.set(body, part);
+        for (const joint of this.joints) {
+            if (joint.Part0 === part || joint.Part1 === part) this.syncJoint(joint);
+        }
     }
 
     removePart(part) {
+        for (const joint of this.joints) {
+            if (joint.Part0 === part || joint.Part1 === part) this.removeJointConstraint(joint);
+        }
         const body = this.bodyMap.get(part);
         if (body && this.world) {
             if (body._partChangedConn) {

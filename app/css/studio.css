@@ -1683,6 +1683,70 @@ body.game-player .viewport-3d {
     pointer-events: auto;
 }
 
+.backpack-bar {
+    position: absolute;
+    z-index: 120;
+    left: 50%;
+    bottom: 18px;
+    display: flex;
+    gap: 4px;
+    max-width: calc(100% - 24px);
+    padding: 4px;
+    overflow-x: auto;
+    transform: translateX(-50%);
+    background: rgba(22, 24, 28, 0.48);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 4px;
+    pointer-events: auto;
+    backdrop-filter: blur(4px);
+}
+
+.backpack-bar[hidden] {
+    display: none;
+}
+
+.backpack-slot {
+    position: relative;
+    display: grid;
+    flex: 0 0 42px;
+    place-items: center;
+    width: 42px;
+    height: 42px;
+    padding: 0;
+    color: var(--text-primary);
+    background: rgba(36, 39, 44, 0.26);
+    border: 1px solid rgba(220, 228, 238, 0.24);
+    border-radius: 3px;
+    cursor: pointer;
+    transition: background-color 120ms ease, border-color 120ms ease;
+}
+
+.backpack-slot:hover {
+    background: rgba(220, 228, 238, 0.12);
+    border-color: rgba(220, 228, 238, 0.58);
+}
+
+.backpack-slot.equipped {
+    background: rgba(0, 162, 255, 0.16);
+    border-color: rgba(0, 162, 255, 0.8);
+}
+
+.backpack-slot-number {
+    position: absolute;
+    top: 2px;
+    left: 4px;
+    color: rgba(242, 244, 247, 0.68);
+    font-size: 9px;
+    line-height: 1;
+}
+
+.backpack-slot-icon {
+    width: 17px;
+    height: 17px;
+    stroke-width: 1.6;
+    opacity: 0.84;
+}
+
 /* Roblox Topbar Button (Tilt Logo) */
 .roblox-topbar-btn {
     width: 38px;
