@@ -773,6 +773,7 @@ class ConbloxRequestHandler(http.server.SimpleHTTPRequestHandler):
                         broadcast_data = json.dumps({
                             "t": "p",
                             "id": current_player_id,
+                            "name": current_player_name,
                             "p": coords,
                             "v": velocities,
                             "y": yaw,
@@ -816,6 +817,7 @@ class ConbloxRequestHandler(http.server.SimpleHTTPRequestHandler):
                         broadcast_data = json.dumps({
                             "t": "p",
                             "id": current_player_id,
+                            "name": current_player_name,
                             "p": coords,
                             "v": velocities,
                             "y": yaw,

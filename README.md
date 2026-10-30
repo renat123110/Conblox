@@ -89,3 +89,5 @@ build_game.py         Сборка Windows-игры из плейса
 deploy/               Файлы и инструкция для Ubuntu-сервера
 requirements-build.txt Зависимости только для сборки .exe
 ```
+
+сайтамер

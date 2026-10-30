@@ -2044,7 +2044,7 @@ export class Viewport {
 
         for (const dec of decals) {
             const onReady = () => {
-                if (this.partMeshes.get(part) === mesh) {
+                if (this.partMeshes.get(part) === mesh || mesh.parent) {
                     this.syncDecalOverlays(part, mesh);
                 }
             };
