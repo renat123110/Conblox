@@ -610,6 +610,26 @@ export class PropertiesUI {
                             inst.C1 = new CFrame(v, ori);
                             this.notifyChange();
                         }
+                    },
+                    {
+                        name: 'C0 Orientation',
+                        type: 'vector3',
+                        value: inst.C0 ? inst.C0.orientation : new Vector3(),
+                        set: (v) => {
+                            const position = inst.C0 ? inst.C0.position : new Vector3();
+                            inst.C0 = new CFrame(position, v);
+                            this.notifyChange();
+                        }
+                    },
+                    {
+                        name: 'C1 Orientation',
+                        type: 'vector3',
+                        value: inst.C1 ? inst.C1.orientation : new Vector3(),
+                        set: (v) => {
+                            const position = inst.C1 ? inst.C1.position : new Vector3();
+                            inst.C1 = new CFrame(position, v);
+                            this.notifyChange();
+                        }
                     }
                 );
             }
@@ -641,6 +661,33 @@ export class PropertiesUI {
             }
 
             this.renderSection(inst.ClassName, rows);
+        }
+
+        if (inst.ClassName === 'KeyframeSequence') {
+            this.renderSection('Animation', [
+                { name: 'Loop', type: 'bool', value: inst.Loop, set: (value) => { inst.Loop = value; this.notifyChange(); } },
+                { name: 'Priority', type: 'string', value: inst.Priority, set: (value) => { inst.Priority = value; this.notifyChange(); } },
+                { name: 'Duration', type: 'number', value: inst.Duration, min: 0, step: 0.01, set: (value) => { inst.Duration = Number(value); this.notifyChange(); } },
+                { name: 'Length', type: 'readonly', value: inst.Length }
+            ]);
+        }
+
+        if (inst.ClassName === 'Keyframe') {
+            this.renderSection('Keyframe', [
+                { name: 'Time', type: 'number', value: inst.Time, min: 0, step: 0.01, set: (value) => { inst.Time = Number(value); this.notifyChange(); } },
+                {
+                    name: 'Position',
+                    type: 'vector3',
+                    value: inst.Position,
+                    set: (value) => { inst.CFrame = new CFrame(value, inst.Orientation); this.notifyChange(); }
+                },
+                {
+                    name: 'Orientation',
+                    type: 'vector3',
+                    value: inst.Orientation,
+                    set: (value) => { inst.CFrame = new CFrame(inst.Position, value); this.notifyChange(); }
+                }
+            ]);
         }
 
         // 16. Camera

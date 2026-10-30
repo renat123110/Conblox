@@ -3,7 +3,7 @@
  * Bridges Cannon.js with the Conblox DataModel
  */
 
-import { Vector3, Color3 } from './Math3D.js';
+import { Vector3, Color3, nearestEulerYXZ } from './Math3D.js';
 
 export class PhysicsEngine {
     constructor(dataModel) {
@@ -125,14 +125,14 @@ export class PhysicsEngine {
     }
 
     isWeldJoint(inst) {
-        return inst && ['Weld', 'WeldConstraint', 'WeldConstant'].includes(inst.ClassName);
+        return inst && ['Weld', 'WeldConstraint', 'WeldConstant', 'Motor6D'].includes(inst.ClassName);
     }
 
     addJoint(joint) {
         this.joints.add(joint);
         if (!this.jointConnections.has(joint)) {
             const connection = joint.Changed.Connect((property) => {
-                if (['Part0', 'Part1', 'Enabled', 'C0', 'C1'].includes(property)) {
+                if (['Part0', 'Part1', 'Enabled', 'C0', 'C1', 'Transform', 'CurrentAngle'].includes(property)) {
                     this.syncJoint(joint);
                 }
             });
@@ -149,7 +149,7 @@ export class PhysicsEngine {
         const body1 = this.bodyMap.get(joint.Part1);
         if (!body0 || !body1 || (body0.mass === 0 && body1.mass === 0)) return;
 
-        if (joint.ClassName === 'Weld') {
+        if (joint.ClassName === 'Weld' || joint.ClassName === 'Motor6D') {
             this.alignWeldParts(joint, body0, body1);
         }
 
@@ -163,7 +163,7 @@ export class PhysicsEngine {
             orientation.x * Math.PI / 180,
             orientation.y * Math.PI / 180,
             orientation.z * Math.PI / 180,
-            'XYZ'
+            'YXZ'
         ));
         const body0Quaternion = new THREE.Quaternion(body0.quaternion.x, body0.quaternion.y, body0.quaternion.z, body0.quaternion.w);
         const body1Quaternion = new THREE.Quaternion(body1.quaternion.x, body1.quaternion.y, body1.quaternion.z, body1.quaternion.w);
@@ -173,6 +173,14 @@ export class PhysicsEngine {
         const c1Quaternion = quaternionFromOrientation(c1.orientation);
         const c0Position = new THREE.Vector3(c0.position.x, c0.position.y, c0.position.z);
         const c1Position = new THREE.Vector3(c1.position.x, c1.position.y, c1.position.z);
+        if (joint.ClassName === 'Motor6D') {
+            const transform = joint.Transform;
+            const transformQuaternion = quaternionFromOrientation(transform.orientation);
+            transformQuaternion.multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), joint.CurrentAngle));
+            const transformPosition = new THREE.Vector3(transform.position.x, transform.position.y, transform.position.z);
+            c0Position.add(transformPosition.applyQuaternion(c0Quaternion));
+            c0Quaternion.multiply(transformQuaternion);
+        }
         let targetBody;
         let targetQuaternion;
         let targetPosition;
@@ -199,11 +207,11 @@ export class PhysicsEngine {
 
         const part = this.reverseMap.get(targetBody);
         if (part) {
-            const euler = new THREE.Euler().setFromQuaternion(targetQuaternion, 'XYZ');
+            const euler = new THREE.Euler().setFromQuaternion(targetQuaternion, 'YXZ');
             this.isSyncing = true;
             try {
                 part.Position = new Vector3(targetPosition.x, targetPosition.y, targetPosition.z);
-                part.Orientation = new Vector3(euler.x * 180 / Math.PI, euler.y * 180 / Math.PI, euler.z * 180 / Math.PI);
+                part.Orientation = nearestEulerYXZ(euler, part.Orientation);
             } finally {
                 this.isSyncing = false;
             }
@@ -275,11 +283,11 @@ export class PhysicsEngine {
         const radY = (part.Orientation.y * Math.PI) / 180;
         const radZ = (part.Orientation.z * Math.PI) / 180;
         if (typeof THREE !== 'undefined') {
-            const euler = new THREE.Euler(radX, radY, radZ, 'XYZ');
+            const euler = new THREE.Euler(radX, radY, radZ, 'YXZ');
             const q = new THREE.Quaternion().setFromEuler(euler);
             body.quaternion.set(q.x, q.y, q.z, q.w);
         } else {
-            body.quaternion.setFromEuler(radX, radY, radZ, 'XYZ');
+            body.quaternion.setFromEuler(radX, radY, radZ, 'YXZ');
         }
 
         if (!part.CanCollide) {
@@ -339,11 +347,11 @@ export class PhysicsEngine {
         const radY = (part.Orientation.y * Math.PI) / 180;
         const radZ = (part.Orientation.z * Math.PI) / 180;
         if (typeof THREE !== 'undefined') {
-            const euler = new THREE.Euler(radX, radY, radZ, 'XYZ');
+            const euler = new THREE.Euler(radX, radY, radZ, 'YXZ');
             const q = new THREE.Quaternion().setFromEuler(euler);
             body.quaternion.set(q.x, q.y, q.z, q.w);
         } else {
-            body.quaternion.setFromEuler(radX, radY, radZ, 'XYZ');
+            body.quaternion.setFromEuler(radX, radY, radZ, 'YXZ');
         }
 
         body.collisionResponse = Boolean(part.CanCollide);
@@ -388,6 +396,15 @@ export class PhysicsEngine {
     step(dt) {
         if (!this.running || !this.world) return;
 
+        for (const joint of this.joints) {
+            if (joint.ClassName !== 'Motor6D' || !joint.Enabled) continue;
+            const difference = joint.DesiredAngle - joint.CurrentAngle;
+            const maxStep = joint.MaxVelocity * dt;
+            if (Math.abs(difference) > 1e-6 && maxStep > 0) {
+                joint.CurrentAngle += Math.sign(difference) * Math.min(Math.abs(difference), maxStep);
+            }
+        }
+
         const fixedTimeStep = 1 / 60;
         this.world.step(fixedTimeStep, dt, 3);
 
@@ -401,15 +418,11 @@ export class PhysicsEngine {
                     // Convert CANNON quaternion to Euler angles in degrees using THREE for reliable XYZ order
                     if (typeof THREE !== 'undefined') {
                         const q = new THREE.Quaternion(body.quaternion.x, body.quaternion.y, body.quaternion.z, body.quaternion.w);
-                        const euler = new THREE.Euler().setFromQuaternion(q, 'XYZ');
-                        part.Orientation = new Vector3(
-                            (euler.x * 180) / Math.PI,
-                            (euler.y * 180) / Math.PI,
-                            (euler.z * 180) / Math.PI
-                        );
+                        const euler = new THREE.Euler().setFromQuaternion(q, 'YXZ');
+                        part.Orientation = nearestEulerYXZ(euler, part.Orientation);
                     } else {
                         const euler = new CANNON.Vec3();
-                        body.quaternion.toEuler(euler, 'YZX');
+                        body.quaternion.toEuler(euler, 'YXZ');
                         part.Orientation = new Vector3(
                             (euler.x * 180) / Math.PI,
                             (euler.y * 180) / Math.PI,

@@ -7,6 +7,9 @@ import { Vector3, Color3, CFrame } from '../engine/Math3D.js';
 import { nativeInputManager } from '../engine/NativeInputManager.js';
 
 const LIGHT_CLASSES = new Set(['PointLight', 'SpotLight', 'SurfaceLight']);
+const HUMANOID_ROUNDED_PARTS = new Set(['Torso', 'Left Arm', 'Right Arm', 'Left Leg', 'Right Leg']);
+const HEAD_MESH_OBJ_SIZE = { x: 1.2078, y: 1.21242, z: 1.207847 };
+const HEAD_MESH_DEFAULT_SCALE = 1.25;
 const LIGHT_FACE_DIRECTIONS = {
     Front: new THREE.Vector3(0, 0, -1),
     Back: new THREE.Vector3(0, 0, 1),
@@ -50,6 +53,97 @@ function createBeamVertices(lightInst) {
     }
 
     return points;
+}
+
+function hasHumanoidModelAncestor(instance) {
+    let ancestor = instance?.Parent;
+    while (ancestor) {
+        if (ancestor.IsA?.('Model') && ancestor.FindFirstChildOfClass?.('Humanoid')) return true;
+        ancestor = ancestor.Parent;
+    }
+    return false;
+}
+
+function clipDecalPolygon(vertices, axis, bound, keepGreater) {
+    const clipped = [];
+    if (vertices.length === 0) return clipped;
+
+    const isInside = vertex => keepGreater
+        ? vertex.projector.getComponent(axis) >= bound
+        : vertex.projector.getComponent(axis) <= bound;
+    let previous = vertices[vertices.length - 1];
+    let previousInside = isInside(previous);
+
+    for (const current of vertices) {
+        const currentInside = isInside(current);
+        if (currentInside !== previousInside) {
+            const amount = (bound - previous.projector.getComponent(axis)) /
+                (current.projector.getComponent(axis) - previous.projector.getComponent(axis));
+            clipped.push({
+                projector: previous.projector.clone().lerp(current.projector, amount),
+                normal: previous.normal.clone().lerp(current.normal, amount).normalize()
+            });
+        }
+        if (currentInside) clipped.push(current);
+        previous = current;
+        previousInside = currentInside;
+    }
+    return clipped;
+}
+
+function createProjectedDecalGeometry(sourceGeometry, center, size, rotation) {
+    const positions = [];
+    const normals = [];
+    const uvs = [];
+    const sourcePositions = sourceGeometry.attributes.position;
+    const sourceNormals = sourceGeometry.attributes.normal;
+    const sourceIndices = sourceGeometry.index;
+    const vertexCount = sourceIndices ? sourceIndices.count : sourcePositions.count;
+    const projectorRotation = new THREE.Quaternion().setFromEuler(rotation);
+    const inverseRotation = projectorRotation.clone().invert();
+    const planes = [
+        [0, -size.x / 2, true], [0, size.x / 2, false],
+        [1, -size.y / 2, true], [1, size.y / 2, false],
+        [2, -size.z / 2, true], [2, size.z / 2, false]
+    ];
+    const readVertex = index => {
+        const position = new THREE.Vector3().fromBufferAttribute(sourcePositions, index);
+        const normal = sourceNormals
+            ? new THREE.Vector3().fromBufferAttribute(sourceNormals, index).normalize()
+            : new THREE.Vector3(0, 0, 1);
+        return {
+            projector: position.sub(center).applyQuaternion(inverseRotation),
+            normal: normal.applyQuaternion(inverseRotation)
+        };
+    };
+
+    for (let triangle = 0; triangle < vertexCount; triangle += 3) {
+        const getIndex = offset => sourceIndices ? sourceIndices.getX(triangle + offset) : triangle + offset;
+        let polygon = [readVertex(getIndex(0)), readVertex(getIndex(1)), readVertex(getIndex(2))];
+        for (const [axis, bound, keepGreater] of planes) {
+            polygon = clipDecalPolygon(polygon, axis, bound, keepGreater);
+            if (polygon.length < 3) break;
+        }
+        if (polygon.length < 3) continue;
+
+        for (let index = 1; index < polygon.length - 1; index++) {
+            for (const vertex of [polygon[0], polygon[index], polygon[index + 1]]) {
+                const position = vertex.projector.clone().applyQuaternion(projectorRotation).add(center);
+                const normal = vertex.normal.clone().applyQuaternion(projectorRotation).normalize();
+                position.addScaledVector(normal, 0.001);
+                positions.push(position.x, position.y, position.z);
+                normals.push(normal.x, normal.y, normal.z);
+                uvs.push(vertex.projector.x / size.x + 0.5, vertex.projector.y / size.y + 0.5);
+            }
+        }
+    }
+
+    const geometry = new THREE.BufferGeometry();
+    geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+    geometry.setAttribute('normal', new THREE.Float32BufferAttribute(normals, 3));
+    geometry.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
+    geometry.computeBoundingSphere();
+    return geometry;
 }
 
 export class Viewport {
@@ -141,7 +235,7 @@ export class Viewport {
         this.sunLight.shadow.camera.top = d;
         this.sunLight.shadow.camera.bottom = -d;
         this.sunLight.shadow.bias = -0.00005;
-        this.sunLight.shadow.normalBias = 0.048;
+        this.sunLight.shadow.normalBias = 0.012;
         this.sunLight.shadow.radius = 3.2;
         this.scene.add(this.sunLight);
         this.scene.add(this.sunLight.target);
@@ -401,6 +495,22 @@ export class Viewport {
     getMaterialTexture(type) {
         if (!this.materialTextures) this.materialTextures = new Map();
         if (this.materialTextures.has(type)) return this.materialTextures.get(type);
+
+        const textureFiles = {
+            Concrete: 'concrete.png',
+            Grass: 'grass.png',
+            Plastic: 'plastic.png',
+            Wood: 'wood.png',
+            WoodPlanks: 'wooden_planks.png'
+        };
+        if (textureFiles[type]) {
+            if (!this.materialTextureLoader) this.materialTextureLoader = new THREE.TextureLoader();
+            const texture = this.materialTextureLoader.load(`/content/textures/materials/${textureFiles[type]}`);
+            texture.wrapS = THREE.RepeatWrapping;
+            texture.wrapT = THREE.RepeatWrapping;
+            this.materialTextures.set(type, texture);
+            return texture;
+        }
 
         const canvas = document.createElement('canvas');
         canvas.width = 256;
@@ -1573,6 +1683,7 @@ export class Viewport {
         const trans = Number(part.Transparency) || 0;
         const transparent = trans > 0;
         const opacity = Math.max(0, Math.min(1, 1 - trans));
+        const hasSpecialMesh = Boolean(part.FindFirstChildOfClass?.('SpecialMesh'));
 
         const baseProps = {
             color: color,
@@ -1584,8 +1695,9 @@ export class Viewport {
 
         // Classic Head with Smiley Face decal (Face is on -Z front face in Roblox coords)
         if (part.Name === 'Head' && this.faceTexture) {
-            const sideMat = new THREE.MeshStandardMaterial({ ...baseProps, roughness: 0.35 });
+            const sideMat = new THREE.MeshStandardMaterial({ ...baseProps, roughness: hasSpecialMesh ? 0.7 : 0.35 });
             const faceMat = new THREE.MeshStandardMaterial({ ...baseProps, roughness: 0.35, map: this.faceTexture });
+            if (hasSpecialMesh) return sideMat;
             // Three.js BoxGeometry face order: [+X, -X, +Y, -Y, +Z, -Z]
             return [sideMat, sideMat, sideMat, sideMat, sideMat, faceMat];
         }
@@ -1794,7 +1906,20 @@ export class Viewport {
             });
         }
 
-        // Default: Plastic (with classic stud texture)
+        if (mat === 'Plastic') {
+            const tex = this.getMaterialTexture('Plastic').clone();
+            tex.wrapS = THREE.RepeatWrapping;
+            tex.wrapT = THREE.RepeatWrapping;
+            tex.repeat.set(0.25, 0.25);
+            tex.needsUpdate = true;
+            return new THREE.MeshStandardMaterial({
+                ...baseProps,
+                roughness: 0.65,
+                map: tex
+            });
+        }
+
+        // Default: fallback material (with classic stud texture)
         let resultMat = null;
         if (this.studTexture) {
             const tex = this.studTexture.clone();
@@ -1823,6 +1948,9 @@ export class Viewport {
         const texVal = String(dec.Texture || '').trim();
         if (!texVal) {
             return this.createPresetDecalTexture('Roblox');
+        }
+        if (texVal.toLowerCase() === 'rbxasset://textures/face.png') {
+            return this.createPresetDecalTexture('Smile');
         }
         const isUrl = texVal.startsWith('http://') || texVal.startsWith('https://') ||
                       texVal.startsWith('data:image/') || texVal.startsWith('blob:') ||
@@ -1905,9 +2033,13 @@ export class Viewport {
         if (decals.length === 0) return;
 
         const s = (part && part.Size) ? part.Size : new Vector3(4, 1, 2);
-        const sx = Math.max(0.05, Number(s.x) || 4);
-        const sy = Math.max(0.05, Number(s.y) || 1);
-        const sz = Math.max(0.05, Number(s.z) || 2);
+        const specialMesh = part.FindFirstChildOfClass?.('SpecialMesh');
+        const scale = specialMesh?.Scale || Vector3.one;
+        const offset = specialMesh?.Offset || Vector3.zero;
+        const isHeadMesh = specialMesh?.MeshType === 'Head';
+        const sx = Math.max(0.05, (isHeadMesh ? HEAD_MESH_OBJ_SIZE.x * Math.abs(scale.x) / HEAD_MESH_DEFAULT_SCALE : Number(s.x) * Math.abs(scale.x)) || 4);
+        const sy = Math.max(0.05, (isHeadMesh ? HEAD_MESH_OBJ_SIZE.y * Math.abs(scale.y) / HEAD_MESH_DEFAULT_SCALE : Number(s.y) * Math.abs(scale.y)) || 1);
+        const sz = Math.max(0.05, (isHeadMesh ? HEAD_MESH_OBJ_SIZE.z * Math.abs(scale.z) / HEAD_MESH_DEFAULT_SCALE : Number(s.z) * Math.abs(scale.z)) || 2);
         const eps = 0.005;
 
         for (const dec of decals) {
@@ -1925,7 +2057,7 @@ export class Viewport {
 
             const face = dec.Face || 'Front';
             switch (face) {
-                case 'Front': // -Z (Roblox standard Front face)
+                case 'Bottom': // -Z
                     w = sx; h = sy;
                     pz = (-sz / 2) - eps;
                     ry = Math.PI;
@@ -1940,10 +2072,14 @@ export class Viewport {
                     py = (sy / 2) + eps;
                     rx = -Math.PI / 2;
                     break;
-                case 'Bottom': // -Y
+                case 'Front': // -Y
                     w = sx; h = sz;
                     py = (-sy / 2) - eps;
                     rx = Math.PI / 2;
+                    if (isHeadMesh && dec.ClassName === 'Decal') {
+                        w *= 0.9;
+                        h *= 0.9;
+                    }
                     break;
                 case 'Right': // +X
                     w = sz; h = sy;
@@ -1976,7 +2112,17 @@ export class Viewport {
                 texForOverlay.needsUpdate = true;
             }
 
-            const planeGeo = new THREE.PlaneGeometry(w, h);
+            const projectorRotation = new THREE.Euler(rx, ry, rz);
+            const projectorNormal = new THREE.Vector3(0, 0, 1).applyEuler(projectorRotation).normalize();
+            const projectorCenter = new THREE.Vector3(px, py, pz)
+                .add(new THREE.Vector3(offset.x, offset.y, offset.z))
+                .addScaledVector(projectorNormal, -Math.min(sx, sy, sz) * 0.325);
+            const decalGeometry = createProjectedDecalGeometry(
+                mesh.geometry,
+                projectorCenter,
+                new THREE.Vector3(w, h, Math.max(0.05, Math.min(sx, sy, sz) * 0.65)),
+                projectorRotation
+            );
             const matColor = (dec.Color && dec.Color.toHex) ? new THREE.Color(dec.Color.toHex()) : new THREE.Color(0xffffff);
             const isImageLoaded = Boolean(dTex.image && (dTex.image.complete !== false && (dTex.image.width > 0 || dTex.image.naturalWidth > 0)));
 
@@ -1994,11 +2140,9 @@ export class Viewport {
                 side: THREE.FrontSide
             });
 
-            const decalMesh = new THREE.Mesh(planeGeo, decalMat);
+            const decalMesh = new THREE.Mesh(decalGeometry, decalMat);
             decalMesh.name = `Decal_${dec.Name}_${face}`;
             decalMesh.userData = { isDecalOverlay: true, decalInstance: dec };
-            decalMesh.position.set(px, py, pz);
-            decalMesh.rotation.set(rx, ry, rz);
             decalMesh.castShadow = false;
             decalMesh.receiveShadow = true;
 
@@ -2021,12 +2165,12 @@ export class Viewport {
         if (name === 'Smile' || name === 'Face') {
             ctx.fillStyle = '#111111';
             ctx.beginPath();
-            ctx.ellipse(88, 96, 16, 24, 0, 0, Math.PI * 2);
-            ctx.ellipse(168, 96, 16, 24, 0, 0, Math.PI * 2);
+            ctx.ellipse(101, 76, 11, 22, 0, 0, Math.PI * 2);
+            ctx.ellipse(155, 76, 11, 22, 0, 0, Math.PI * 2);
             ctx.fill();
             ctx.beginPath();
-            ctx.arc(128, 140, 52, 0.15 * Math.PI, 0.85 * Math.PI);
-            ctx.lineWidth = 10;
+            ctx.arc(128, 160, 56, 0.15 * Math.PI, 0.85 * Math.PI);
+            ctx.lineWidth = 9;
             ctx.stroke();
         } else if (name === 'Warning' || name === 'Hazard') {
             ctx.fillStyle = '#f5c518';
@@ -2062,6 +2206,31 @@ export class Viewport {
         const sx = Math.max(0.05, Number(s.x) || 4);
         const sy = Math.max(0.05, Number(s.y) || 1);
         const sz = Math.max(0.05, Number(s.z) || 2);
+
+        const specialMesh = part?.FindFirstChildOfClass?.('SpecialMesh');
+        if (specialMesh) {
+            const meshType = specialMesh.MeshType;
+            let geometry;
+            if (meshType === 'Head') {
+                geometry = this.createRoundedBoxGeometry(
+                    HEAD_MESH_OBJ_SIZE.x * Math.abs(specialMesh.Scale.x) / HEAD_MESH_DEFAULT_SCALE,
+                    HEAD_MESH_OBJ_SIZE.y * Math.abs(specialMesh.Scale.y) / HEAD_MESH_DEFAULT_SCALE,
+                    HEAD_MESH_OBJ_SIZE.z * Math.abs(specialMesh.Scale.z) / HEAD_MESH_DEFAULT_SCALE
+                );
+            } else if (meshType === 'Sphere') {
+                geometry = new THREE.SphereGeometry(0.5, 32, 24);
+            } else if (meshType === 'Cylinder') {
+                geometry = new THREE.CylinderGeometry(0.5, 0.5, 1, 28);
+            } else {
+                geometry = new THREE.BoxGeometry(1, 1, 1);
+            }
+
+            const scale = specialMesh.Scale || Vector3.one;
+            const offset = specialMesh.Offset || Vector3.zero;
+            if (meshType !== 'Head') geometry.scale(sx * scale.x, sy * scale.y, sz * scale.z);
+            geometry.translate(offset.x, offset.y, offset.z);
+            return geometry;
+        }
 
         if (part.Shape === 'Ball') {
             const geo = new THREE.SphereGeometry(Math.max(0.1, sx / 2), 28, 28);
@@ -2118,6 +2287,10 @@ export class Viewport {
             return geo;
         }
 
+        if (part.Shape === 'Block' && HUMANOID_ROUNDED_PARTS.has(part.Name) && hasHumanoidModelAncestor(part)) {
+            return this.createRoundedBoxGeometry(sx, sy, sz, 0.05);
+        }
+
         // Default Block: 1:1 studs UV mapping per face to prevent any stretching
         const geo = new THREE.BoxGeometry(sx, sy, sz);
         if (geo.attributes.uv) {
@@ -2166,6 +2339,52 @@ export class Viewport {
         return geo;
     }
 
+    createRoundedBoxGeometry(width, height, depth, radiusFactor = 0.25) {
+        const radius = Math.min(width, height, depth) * radiusFactor;
+        const shape = new THREE.Shape();
+        const halfWidth = width / 2 - radius;
+        const halfHeight = height / 2 - radius;
+        const left = -halfWidth + radius;
+        const right = halfWidth - radius;
+        const bottom = -halfHeight + radius;
+        const top = halfHeight - radius;
+
+        shape.moveTo(left, -halfHeight);
+        shape.lineTo(right, -halfHeight);
+        shape.quadraticCurveTo(halfWidth, -halfHeight, halfWidth, bottom);
+        shape.lineTo(halfWidth, top);
+        shape.quadraticCurveTo(halfWidth, halfHeight, right, halfHeight);
+        shape.lineTo(left, halfHeight);
+        shape.quadraticCurveTo(-halfWidth, halfHeight, -halfWidth, top);
+        shape.lineTo(-halfWidth, bottom);
+        shape.quadraticCurveTo(-halfWidth, -halfHeight, left, -halfHeight);
+
+        const geometry = new THREE.ExtrudeGeometry(shape, {
+            depth: Math.max(0.01, depth - radius * 2),
+            bevelEnabled: true,
+            bevelSegments: 10,
+            bevelSize: radius,
+            bevelThickness: radius,
+            curveSegments: 12
+        });
+        geometry.translate(0, 0, -depth / 2 + radius);
+
+        const positions = geometry.attributes.position;
+        const normals = new Float32Array(positions.count * 3);
+        const half = [width / 2, height / 2, depth / 2];
+        const inner = half.map(value => value - radius);
+        for (let index = 0; index < positions.count; index++) {
+            const point = [positions.getX(index), positions.getY(index), positions.getZ(index)];
+            const normal = point.map((value, axis) => value - Math.max(-inner[axis], Math.min(inner[axis], value)));
+            const length = Math.hypot(...normal) || 1;
+            normals[index * 3] = normal[0] / length;
+            normals[index * 3 + 1] = normal[1] / length;
+            normals[index * 3 + 2] = normal[2] / length;
+        }
+        geometry.setAttribute('normal', new THREE.Float32BufferAttribute(normals, 3));
+        return geometry;
+    }
+
     syncPartMesh(part) {
         // Strictly only sync BasePart instances
         if (!part || !part.IsA || !part.IsA('BasePart')) return;
@@ -2188,7 +2407,7 @@ export class Viewport {
             this.meshParts.set(mesh, part);
 
             // Iconic Roblox Top Head Stud & Overhead Billboard for Head
-            if (part.Name === 'Head') {
+            if (part.Name === 'Head' && !part.FindFirstChildOfClass('SpecialMesh')) {
                 const studGeo = new THREE.CylinderGeometry(0.38, 0.38, 0.22, 24);
                 const studMat = new THREE.MeshStandardMaterial({
                     color: 0xf5cd2f,
@@ -2216,6 +2435,14 @@ export class Viewport {
                         this.syncDecalOverlays(part, mesh);
                     });
                     this.syncDecalOverlays(part, mesh);
+                } else if (child.ClassName === 'SpecialMesh') {
+                    child.Changed?.Connect(() => {
+                        mesh.geometry.dispose();
+                        mesh.geometry = this.createGeometryForPart(part);
+                        this.syncDecalOverlays(part, mesh);
+                    });
+                    mesh.geometry.dispose();
+                    mesh.geometry = this.createGeometryForPart(part);
                 } else if (LIGHT_CLASSES.has(child.ClassName)) {
                     this.syncPointLight(child);
                 }
@@ -2223,6 +2450,9 @@ export class Viewport {
             part.ChildRemoved?.Connect((child) => {
                 if (child.ClassName === 'Decal' || child.ClassName === 'Texture') {
                     this.syncDecalOverlays(part, mesh);
+                } else if (child.ClassName === 'SpecialMesh') {
+                    mesh.geometry.dispose();
+                    mesh.geometry = this.createGeometryForPart(part);
                 }
             });
 
@@ -2232,6 +2462,12 @@ export class Viewport {
                         this.syncPointLight(child);
                     } else if (child.ClassName === 'Decal' || child.ClassName === 'Texture') {
                         child.Changed?.Connect(() => {
+                            this.syncDecalOverlays(part, mesh);
+                        });
+                    } else if (child.ClassName === 'SpecialMesh') {
+                        child.Changed?.Connect(() => {
+                            mesh.geometry.dispose();
+                            mesh.geometry = this.createGeometryForPart(part);
                             this.syncDecalOverlays(part, mesh);
                         });
                     }
@@ -2761,7 +2997,7 @@ export class Viewport {
             (amb.g / 255) * ambFactor,
             (amb.b / 255) * ambFactor
         );
-        this.ambientLight.intensity = Math.max(0.08, (brightness * 0.45) * ambFactor);
+        this.ambientLight.intensity = Math.max(0.08, (brightness * 0.14) * ambFactor);
 
         // Hemisphere Light
         if (this.hemiLight) {
@@ -2775,7 +3011,7 @@ export class Viewport {
                 (outAmb.g / 255) * 0.2 * dayAlpha,
                 (outAmb.b / 255) * 0.2 * dayAlpha
             );
-            this.hemiLight.intensity = Math.max(0.05, (brightness * 0.4) * (0.2 + 0.8 * dayAlpha));
+            this.hemiLight.intensity = Math.max(0.05, (brightness * 0.12) * (0.2 + 0.8 * dayAlpha));
         }
     }
 
@@ -4231,7 +4467,7 @@ export class Viewport {
             this.setShadowResolution(512);
             this.setShadowFrustumRadius(140);
             this.setShadowSoftness(1.0);
-            this.setShadowNormalBias(0.02);
+            this.setShadowNormalBias(0.012);
             this.bloomQuality = level >= 5 ? 'basic' : 'off';
             this.bloomMips = level >= 5 ? 3 : 2;
             this.sunRaysQuality = 'off';
@@ -4243,7 +4479,7 @@ export class Viewport {
             this.setShadowResolution(2048);
             this.setShadowFrustumRadius(80);
             this.setShadowSoftness(2.4);
-            this.setShadowNormalBias(0.035);
+            this.setShadowNormalBias(0.012);
             this.bloomQuality = 'basic';
             this.bloomMips = 4;
             this.sunRaysQuality = 'on';
@@ -4255,7 +4491,7 @@ export class Viewport {
             this.setShadowResolution(4096);
             this.setShadowFrustumRadius(60);
             this.setShadowSoftness(2.8);
-            this.setShadowNormalBias(0.045);
+            this.setShadowNormalBias(0.012);
             this.bloomQuality = 'cinematic';
             this.bloomMips = 5;
             this.sunRaysQuality = 'on';
@@ -4267,7 +4503,7 @@ export class Viewport {
             this.setShadowResolution(4096);
             this.setShadowFrustumRadius(48);
             this.setShadowSoftness(3.2);
-            this.setShadowNormalBias(0.048);
+            this.setShadowNormalBias(0.012);
             this.bloomQuality = 'cinematic';
             this.bloomMips = 5;
             this.sunRaysQuality = 'on';
@@ -4317,7 +4553,7 @@ export class Viewport {
 
     setShadowNormalBias(bias) {
         if (this.sunLight && this.sunLight.shadow) {
-            this.sunLight.shadow.normalBias = Math.max(0, Number(bias) || 0.02);
+            this.sunLight.shadow.normalBias = Math.min(0.025, Math.max(0.001, Number(bias) || 0.012));
         }
     }
 

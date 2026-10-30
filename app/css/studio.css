@@ -25,7 +25,7 @@
     --ribbon-height: 99px;
     --topbar-height: 23px;
     --right-dock-width: 300px;
-    --output-height: 190px;
+    --output-height: clamp(270px, 34vh, 360px);
 
     --font-ui: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
     --font-mono: "Cascadia Code", "Fira Code", Consolas, Menlo, monospace;
@@ -841,7 +841,7 @@ body, html {
 
 body.game-player #studio-ribbon-container,
 body.game-player #right-dock,
-body.game-player #panel-output,
+body.game-player #bottom-dock,
 body.game-player #center-tabs-bar,
 body.game-player #script-editor-container {
     display: none !important;
@@ -968,6 +968,12 @@ body.game-player .viewport-3d {
 
 .panel-split {
     height: 4px;
+    background-color: var(--border-color);
+    cursor: row-resize;
+}
+
+.output-panel-split {
+    flex: 0 0 4px;
     background-color: var(--border-color);
     cursor: row-resize;
 }
@@ -1513,11 +1519,24 @@ body.game-player .viewport-3d {
    Output Console & Command Bar
    -------------------------------------------------------------------------- */
 .panel-output {
-    height: var(--output-height);
+    flex: 1 1 50%;
+    width: 50%;
+    min-width: 0;
+    height: 100%;
     background-color: var(--bg-panel);
     border-top: 1px solid var(--border-color);
     display: flex;
     flex-direction: column;
+}
+
+.bottom-dock {
+    display: flex;
+    flex: 0 0 var(--output-height);
+    width: 100%;
+    min-width: 0;
+    overflow: hidden;
+    background: var(--bg-panel);
+    border-top: 1px solid var(--border-color);
 }
 
 #panel-output > .panel-header {
@@ -2140,6 +2159,516 @@ body.game-player .viewport-3d {
 .settings-close-btn svg {
     width: 16px;
     height: 16px;
+}
+
+.animation-editor-dock[hidden] {
+    display: none;
+}
+
+.animation-editor-dock {
+    display: flex;
+    flex: 0 0 50%;
+    width: 50%;
+    min-width: 0;
+    min-height: 0;
+    overflow: hidden;
+    background: var(--bg-darker);
+    border-left: 1px solid var(--border-color);
+}
+
+.animation-editor-window {
+    width: 100%;
+    height: 100%;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    color: var(--text-primary);
+    background: var(--bg-darker);
+    border: 1px solid var(--border-color);
+    border: 0;
+    border-radius: 0;
+    box-shadow: none;
+    font-family: var(--font-ui);
+}
+
+.animation-editor-header {
+    position: relative;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+    align-items: center;
+    flex: 0 0 26px;
+    min-height: 26px;
+    padding: 0 7px;
+    background: #25272d;
+    border-bottom: 1px solid #111318;
+}
+
+.animation-editor-header h2 {
+    grid-column: 2;
+    margin: 0;
+    color: #e2e4e8;
+    font-size: 11px;
+    font-weight: 600;
+}
+
+#animation-editor-status {
+    grid-column: 1;
+    grid-row: 1;
+    min-width: 0;
+    overflow: hidden;
+    color: #87909d;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 9px;
+}
+
+.animation-editor-header [data-action="close"] {
+    grid-column: 3;
+    grid-row: 1;
+    justify-self: end;
+    width: 22px;
+    min-width: 22px;
+    min-height: 22px;
+    height: 22px;
+    border: 0;
+    background: transparent;
+}
+
+.animation-editor-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex: 0 0 36px;
+    min-width: 0;
+    min-height: 36px;
+    gap: 5px;
+    overflow-x: auto;
+    overflow-y: hidden;
+    padding: 3px 7px;
+    background: #202228;
+    border-bottom: 1px solid #111318;
+}
+
+.animation-rig-controls,
+.animation-transport-buttons,
+.animation-time-controls {
+    display: flex;
+    align-items: center;
+    flex: 0 0 auto;
+    gap: 3px;
+}
+
+.animation-select-field {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    flex: 0 0 auto;
+    color: var(--text-secondary);
+    font-size: 10px;
+}
+
+.animation-select-field select {
+    width: 90px;
+    min-width: 70px;
+    height: 25px;
+    padding: 0 6px;
+    color: var(--text-primary);
+    background: #191b20;
+    border: 1px solid #30343b;
+    border-radius: 2px;
+    font-size: 10px;
+}
+
+.animation-action-button,
+.animation-icon-button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    min-height: 25px;
+    padding: 0 6px;
+    color: var(--text-primary);
+    background: #30343b;
+    border: 1px solid #444a53;
+    border-radius: 2px;
+    cursor: pointer;
+    font: inherit;
+    font-size: 10px;
+}
+
+.animation-action-button:hover,
+.animation-icon-button:hover {
+    background: #3a414a;
+    border-color: #68717e;
+}
+
+.animation-action-button svg,
+.animation-icon-button svg {
+    width: 14px;
+    height: 14px;
+}
+
+.animation-icon-button {
+    width: 25px;
+    min-width: 25px;
+    height: 25px;
+    padding: 0;
+}
+
+.animation-editor-toolbar .animation-icon-button {
+    width: 22px;
+    min-width: 22px;
+    height: 22px;
+    min-height: 22px;
+}
+
+.animation-save-button {
+    color: #fff;
+    background: #087c91;
+    border-color: #1398a8;
+}
+
+.animation-save-button:hover {
+    background: #0996a5;
+}
+
+.animation-editor-workspace {
+    display: flex;
+    flex: 1 1 0;
+    min-height: 0;
+    min-width: 0;
+    overflow: hidden;
+}
+
+.animation-editor-sidebar {
+    display: flex;
+    flex: 0 0 208px;
+    flex-direction: column;
+    min-height: 0;
+    background: #191b20;
+    border-right: 1px solid #363941;
+}
+
+.animation-rig-root-row,
+.animation-track-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    width: 100%;
+    min-width: 0;
+    height: 27px;
+    padding: 0 8px;
+    overflow: hidden;
+    color: #d3d5d9;
+    text-align: left;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    background: transparent;
+    border: 0;
+    cursor: pointer;
+    font: inherit;
+    font-size: 11px;
+}
+
+.animation-rig-root-row {
+    flex: 0 0 27px;
+    font-weight: 600;
+}
+
+.animation-rig-root-row svg {
+    width: 13px;
+    height: 13px;
+    flex: 0 0 auto;
+}
+
+.animation-track-tree {
+    flex: 1 1 0;
+    min-height: 0;
+    overflow: auto;
+    padding: 0;
+}
+
+.animation-track-item {
+    height: 27px;
+    min-height: 27px;
+    padding-block: 0;
+}
+
+.animation-track-item:hover,
+.animation-track-item.active {
+    color: #f0f2f5;
+    background: #383b45;
+}
+
+.animation-track-caret {
+    display: inline-flex;
+    justify-content: center;
+    flex: 0 0 12px;
+    color: #aeb4be;
+}
+
+.animation-track-name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.animation-empty-state {
+    padding: 16px 12px;
+    color: var(--text-muted);
+    font-size: 11px;
+}
+
+.animation-editor-timeline {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    min-width: 0;
+    min-height: 0;
+}
+
+.animation-time-controls {
+    justify-content: flex-end;
+    color: #d0d3d9;
+    font-size: 10px;
+}
+
+.animation-time-entry,
+.animation-duration-control,
+.animation-fps-control,
+.animation-loop-control {
+    display: inline-flex;
+    align-items: center;
+    flex: 0 0 auto;
+    gap: 4px;
+}
+
+.animation-time-entry input,
+.animation-fps-control input {
+    width: 46px;
+    height: 24px;
+    padding: 0 4px;
+    color: #e6e8ec;
+    background: #15171c;
+    border: 1px solid #30343c;
+    border-radius: 2px;
+    font: inherit;
+    font-size: 10px;
+}
+
+.animation-fps-control {
+    color: #aeb4bd;
+    font-size: 10px;
+}
+
+.animation-fps-control input {
+    width: 34px;
+}
+
+.animation-loop-control {
+    color: #aeb4bd;
+    font-size: 10px;
+}
+
+.animation-loop-control input {
+    width: 13px;
+    height: 13px;
+    margin: 0;
+    accent-color: #4a83ff;
+}
+
+.animation-timeline-scroll {
+    flex: 1 1 0;
+    min-height: 0;
+    overflow: auto;
+    background-color: #1b1e23;
+    background-image: linear-gradient(rgba(255,255,255,0.025) 1px, transparent 1px);
+    background-size: 100% 30px;
+}
+
+.animation-timeline-content {
+    position: relative;
+    min-width: 440px;
+    min-height: 100%;
+}
+
+.animation-ruler {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    height: 25px;
+    cursor: crosshair;
+    background-color: #202329;
+    background-image: repeating-linear-gradient(to right, transparent 0, transparent calc(10% - 1px), rgba(160, 168, 180, 0.28) calc(10% - 1px), rgba(160, 168, 180, 0.28) 10%);
+    border-bottom: 1px solid #3b3e47;
+}
+
+.animation-ruler span {
+    position: absolute;
+    top: 3px;
+    color: #a7adb7;
+    font-size: 10px;
+    transform: translateX(-50%);
+    pointer-events: none;
+}
+
+.animation-timeline-row {
+    height: 28px;
+    cursor: crosshair;
+    background: rgba(255,255,255,0.025);
+    border-bottom: 1px solid rgba(255,255,255,0.06);
+}
+
+.animation-timeline-row:nth-child(even) {
+    background: rgba(0,0,0,0.17);
+}
+
+.animation-timeline-row.active {
+    background: rgba(117, 128, 158, 0.18);
+}
+
+.animation-timeline-lane {
+    position: relative;
+    width: 100%;
+    height: 100%;
+}
+
+.animation-key-marker {
+    position: absolute;
+    top: 50%;
+    width: 9px;
+    height: 9px;
+    padding: 0;
+    background: #25c6c2;
+    border: 1px solid #b2ffff;
+    border-radius: 2px;
+    cursor: pointer;
+    transform: translate(-50%, -50%) rotate(45deg);
+}
+
+.animation-key-marker:hover {
+    background: #fff;
+}
+
+.animation-key-marker.selected {
+    background: #fff;
+    box-shadow: 0 0 0 2px rgba(37, 198, 194, 0.28);
+}
+
+.animation-playhead-line {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    z-index: 4;
+    width: 1px;
+    background: #5e86ff;
+    box-shadow: 0 0 1px rgba(90, 130, 255, 0.8);
+    pointer-events: none;
+}
+
+.animation-playhead-line::before {
+    position: absolute;
+    top: 0;
+    left: -3px;
+    width: 0;
+    height: 0;
+    border-top: 8px solid #5e86ff;
+    border-right: 4px solid transparent;
+    border-left: 4px solid transparent;
+    content: '';
+}
+
+@media (max-width: 760px) {
+    .bottom-dock {
+        flex-basis: 58vh;
+        min-height: 360px;
+        flex-direction: column;
+    }
+    .panel-output {
+        flex: 1 1 0;
+        width: 100%;
+        height: 100%;
+        min-height: 0;
+    }
+    .animation-editor-dock {
+        flex: 1 1 0;
+        width: 100%;
+        border-top: 1px solid var(--border-color);
+        border-left: 0;
+    }
+    .animation-editor-window { width: 100%; height: 100%; }
+    .animation-editor-toolbar { gap: 6px; }
+    .animation-select-field { flex: 0 0 auto; }
+    .animation-select-field select { width: 116px; }
+    .animation-editor-sidebar { flex-basis: 185px; }
+}
+
+@media (max-width: 520px) {
+    .animation-editor-toolbar {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        grid-template-rows: 28px 28px;
+        flex: 0 0 62px;
+        min-height: 62px;
+        align-content: center;
+        gap: 2px 4px;
+        overflow: hidden;
+        padding: 3px 4px;
+    }
+    .animation-rig-controls {
+        grid-column: 1 / -1;
+        grid-row: 1;
+        width: 100%;
+        min-width: 0;
+        gap: 3px;
+    }
+    .animation-rig-controls .animation-select-field { gap: 3px; }
+    .animation-rig-controls .animation-select-field select { width: 76px; min-width: 60px; }
+    .animation-rig-controls .animation-select-field:nth-child(2) select { width: 84px; }
+    .animation-rig-controls .animation-icon-button {
+        width: 22px;
+        min-width: 22px;
+        height: 22px;
+        min-height: 22px;
+    }
+    .animation-transport-buttons {
+        grid-column: 1;
+        grid-row: 2;
+        min-width: 0;
+        gap: 2px;
+    }
+    .animation-transport-buttons .animation-icon-button {
+        width: 22px;
+        min-width: 22px;
+        height: 22px;
+        min-height: 22px;
+    }
+    .animation-transport-buttons [data-action="previous-key"],
+    .animation-transport-buttons [data-action="next-key"] { display: none; }
+    .animation-time-controls {
+        grid-column: 2;
+        grid-row: 2;
+        gap: 2px;
+        white-space: nowrap;
+    }
+    .animation-current-time { width: 39px !important; }
+    .animation-duration-input { width: 48px !important; }
+    .animation-fps-control { gap: 2px; }
+    .animation-editor-workspace { flex-direction: row; }
+    .animation-editor-sidebar {
+        flex: 0 0 142px;
+        min-width: 0;
+        border-right: 1px solid var(--border-color);
+        border-bottom: 0;
+    }
+    .animation-panel-heading { padding-inline: 7px; }
+    .animation-vector-group { grid-template-columns: 1fr; gap: 3px; padding-inline: 6px; }
+    .animation-editor-timeline { flex: 1 1 0; min-width: 0; }
+    .animation-transport-buttons { gap: 2px; }
+    .animation-transport-buttons { flex-wrap: nowrap; gap: 3px; }
+    .animation-time-controls { gap: 4px; font-size: 10px; }
+    .animation-editor-sidebar { flex: 0 0 142px; }
 }
 
 /* Modal Body */

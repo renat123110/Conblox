@@ -7,7 +7,7 @@ import { DataModel } from '../engine/DataModel.js';
 import { Instance } from '../engine/Instance.js';
 import { Part, SpawnLocation } from '../engine/BasePart.js';
 import { Model, Folder, Script, LocalScript, PointLight, Sound, Decal, Texture } from '../engine/OtherInstances.js';
-import { Vector3, Color3 } from '../engine/Math3D.js';
+import { Vector3, Color3, CFrame, nearestEulerYXZ } from '../engine/Math3D.js';
 import { PhysicsEngine } from '../engine/PhysicsEngine.js';
 import { CharacterController } from '../engine/CharacterController.js';
 import { MultiplayerClient } from '../engine/MultiplayerClient.js';
@@ -24,8 +24,67 @@ import { ScriptEditorUI } from './ScriptEditorUI.js';
 import { HistoryManager } from './HistoryManager.js';
 import { TemplateManager } from './TemplateManager.js';
 import { SettingsUI } from './SettingsUI.js';
+import { AnimationEditorUI } from './AnimationEditorUI.js';
 import { BackpackUI } from './BackpackUI.js';
 import { nativeInputManager } from '../engine/NativeInputManager.js';
+import { parseRbxm } from './RbxmImporter.js';
+
+function getRobloxAssetId(value) {
+    const match = String(value || '').match(/(?:^rbxassetid:\/\/|[?&]id=)(\d+)/i);
+    return match ? match[1] : null;
+}
+
+function encodePngDataUrl(buffer) {
+    const bytes = new Uint8Array(buffer);
+    let binary = '';
+    const chunkSize = 0x8000;
+    for (let offset = 0; offset < bytes.length; offset += chunkSize) {
+        binary += String.fromCharCode(...bytes.subarray(offset, offset + chunkSize));
+    }
+    return `data:image/png;base64,${btoa(binary)}`;
+}
+
+async function embedRobloxTextures(roots) {
+    const references = [];
+    const assetIds = new Set();
+    const visit = (instance) => {
+        const properties = instance.ClassName === 'SpecialMesh'
+            ? ['TextureId']
+            : (instance.ClassName === 'Decal' || instance.ClassName === 'Texture' || instance.ClassName === 'ParticleEmitter'
+                ? ['Texture']
+                : []);
+        for (const property of properties) {
+            const assetId = getRobloxAssetId(instance[property]);
+            if (assetId) {
+                references.push({ instance, property, assetId });
+                assetIds.add(assetId);
+            }
+        }
+        for (const child of instance.GetChildren()) visit(child);
+    };
+    for (const root of roots) visit(root);
+
+    const downloaded = new Map();
+    const failedAssetIds = [];
+    await Promise.all(Array.from(assetIds, async assetId => {
+        try {
+            const response = await fetch(`/api/roblox-asset?id=${encodeURIComponent(assetId)}`);
+            if (!response.ok) {
+                const error = await response.json().catch(() => ({}));
+                throw new Error(error.error || `Roblox asset ${assetId} download failed`);
+            }
+            downloaded.set(assetId, encodePngDataUrl(await response.arrayBuffer()));
+        } catch (error) {
+            console.warn(`[Studio] Could not download Roblox asset ${assetId}:`, error);
+            failedAssetIds.push(assetId);
+        }
+    }));
+
+    for (const { instance, property, assetId } of references) {
+        if (downloaded.has(assetId)) instance[property] = downloaded.get(assetId);
+    }
+    return { embeddedCount: downloaded.size, failedAssetIds };
+}
 
 export class StudioApp {
     constructor() {
@@ -43,7 +102,10 @@ export class StudioApp {
         this.scriptRunner = null;
         this.historyManager = null;
         this.settingsUI = null;
+        this.animationEditorUI = null;
         this.backpackUI = null;
+        this.starterCharacterPromise = null;
+        this.isStartingSimulation = false;
 
         this.selectedInstance = null;
         this.simulationState = 'Edit'; // 'Edit', 'Play', 'Run'
@@ -79,10 +141,16 @@ export class StudioApp {
         // 4. Gizmos
         this.gizmoManager = new GizmoManager(
             this.viewport,
-            () => {
+            (part) => {
                 this.propertiesUI.scheduleUpdateValues();
+                if (this.animationEditorUI?.containsPart(part)) {
+                    this.animationEditorUI.syncMotorTransformsFromParts({ autoKeyframe: true });
+                }
             },
             (part) => {
+                if (this.animationEditorUI?.containsPart(part)) {
+                    this.animationEditorUI.syncMotorTransformsFromParts({ autoKeyframe: true });
+                }
                 this.historyManager.recordState();
             }
         );
@@ -105,6 +173,8 @@ export class StudioApp {
                 if (inst && inst.IsA && inst.IsA('BasePart')) {
                     this.viewport.syncPartMesh(inst);
                     if (this.gizmoManager) this.gizmoManager.update();
+                } else if (inst && inst.ClassName === 'Motor6D') {
+                    this.applyMotor6DPreview(inst);
                 } else if (inst && inst.ClassName === 'Lighting') {
                     this.viewport.syncAllParts();
                 }
@@ -127,6 +197,9 @@ export class StudioApp {
         this.soundEngine = new SoundEngine();
         this.physicsEngine = new PhysicsEngine(this.dataModel);
         this.characterController = new CharacterController(this.dataModel, this.physicsEngine, this.soundEngine, this.viewport);
+        this.starterCharacterPromise = this.loadStarterCharacter().catch(error => {
+            this.starterCharacterLoadError = error;
+        });
         this.viewport.characterController = this.characterController;
         this.backpackUI = new BackpackUI(viewportContainer, (tool) => this.toggleTool(tool));
         this.multiplayerClient = new MultiplayerClient(this);
@@ -195,6 +268,8 @@ export class StudioApp {
         );
         this.historyManager.recordState();
 
+        this.animationEditorUI = new AnimationEditorUI(this);
+
         // 11. Studio Settings UI
         this.settingsUI = new SettingsUI(this);
 
@@ -220,15 +295,19 @@ export class StudioApp {
             const clickedRaw = this.viewport.raycast(e.clientX, e.clientY, !e.altKey);
             let clickedPart = clickedRaw;
             if (clickedRaw && !e.altKey) {
-                let curr = clickedRaw.Parent;
-                let topModel = null;
-                while (curr && curr !== this.dataModel && curr !== this.dataModel.Workspace) {
-                    if (curr.IsA && curr.IsA('Model')) {
-                        topModel = curr;
+                const editingRigPart = this.animationEditorUI && !this.animationEditorUI.backdrop.hidden &&
+                    this.animationEditorUI.containsPart(clickedRaw);
+                if (!editingRigPart) {
+                    let curr = clickedRaw.Parent;
+                    let topModel = null;
+                    while (curr && curr !== this.dataModel && curr !== this.dataModel.Workspace) {
+                        if (curr.IsA && curr.IsA('Model')) {
+                            topModel = curr;
+                        }
+                        curr = curr.Parent;
                     }
-                    curr = curr.Parent;
+                    if (topModel) clickedPart = topModel;
                 }
-                if (topModel) clickedPart = topModel;
             }
 
             if (e.shiftKey) {
@@ -260,6 +339,7 @@ export class StudioApp {
 
         // Right dock vertical resizer
         this.bindDockSplitter();
+        this.bindOutputSplitter();
 
         // FPS Counter element (toggled with F9, hidden by default)
         this.fpsCounterEl = document.createElement('div');
@@ -295,6 +375,37 @@ export class StudioApp {
 
         // Automatically open baseplate.cblx from places folder
         this.loadInitialPlace();
+    }
+
+    bindOutputSplitter() {
+        const splitEl = document.getElementById('output-panel-split');
+        const bottomDockEl = document.getElementById('bottom-dock');
+        if (!splitEl || !bottomDockEl) return;
+
+        let isSplitting = false;
+        let startY = 0;
+        let startHeight = 0;
+
+        splitEl.addEventListener('mousedown', (event) => {
+            isSplitting = true;
+            startY = event.clientY;
+            startHeight = bottomDockEl.clientHeight;
+            document.body.style.cursor = 'row-resize';
+            event.preventDefault();
+        });
+
+        window.addEventListener('mousemove', (event) => {
+            if (!isSplitting) return;
+            const deltaY = startY - event.clientY;
+            const newHeight = Math.max(100, Math.min(window.innerHeight - 200, startHeight + deltaY));
+            bottomDockEl.style.flex = `0 0 ${newHeight}px`;
+        });
+
+        window.addEventListener('mouseup', () => {
+            if (!isSplitting) return;
+            isSplitting = false;
+            document.body.style.cursor = 'default';
+        });
     }
 
     bindDockSplitter() {
@@ -417,6 +528,13 @@ export class StudioApp {
 
     selectInstance(inst, multiInstances = null) {
         this.selectedInstance = inst;
+        if (this.animationEditorUI && !this.animationEditorUI.backdrop.hidden) {
+            let selectedModel = inst;
+            while (selectedModel && selectedModel.ClassName !== 'Model') selectedModel = selectedModel.Parent;
+            if (selectedModel?.FindFirstChildOfClass('Humanoid', true)) {
+                this.animationEditorUI.refreshRigOptions(selectedModel);
+            }
+        }
         this.viewport?.setSelectedLight(inst && ['SpotLight', 'SurfaceLight'].includes(inst.ClassName) ? inst : null);
         if (multiInstances && multiInstances.length > 1) {
             if (this.explorerUI) {
@@ -466,6 +584,50 @@ export class StudioApp {
         } else {
             this.gizmoManager.detach();
         }
+        if (inst && inst.IsA && inst.IsA('BasePart')) {
+            this.animationEditorUI?.positionGizmoAtJoint(inst);
+        }
+    }
+
+    openAnimationEditor() {
+        let model = this.selectedInstance;
+        while (model && model.ClassName !== 'Model') model = model.Parent;
+        this.animationEditorUI?.open(model);
+    }
+
+    applyMotor6DPreview(motor) {
+        if (!motor.Enabled || !motor.Part0 || !motor.Part1 || typeof THREE === 'undefined') return;
+
+        const toMatrix = (frame) => {
+            const object = new THREE.Object3D();
+            object.position.set(frame.position.x, frame.position.y, frame.position.z);
+            object.rotation.set(
+                frame.orientation.x * Math.PI / 180,
+                frame.orientation.y * Math.PI / 180,
+                frame.orientation.z * Math.PI / 180,
+                'YXZ'
+            );
+            object.updateMatrix();
+            return object.matrix;
+        };
+        const part0 = motor.Part0;
+        const part1Matrix = toMatrix({ position: part0.Position, orientation: part0.Orientation })
+            .multiply(toMatrix(motor.C0))
+            .multiply(toMatrix(motor.Transform))
+            .multiply(new THREE.Matrix4().makeRotationX(motor.CurrentAngle))
+            .multiply(toMatrix(motor.C1).invert());
+        const position = new THREE.Vector3();
+        const quaternion = new THREE.Quaternion();
+        const scale = new THREE.Vector3();
+        part1Matrix.decompose(position, quaternion, scale);
+        const orientation = new THREE.Euler().setFromQuaternion(quaternion, 'YXZ');
+        const nearestOrientation = nearestEulerYXZ(orientation, motor._lastAppliedPart1Orientation || motor.Part1.Orientation);
+        motor._lastAppliedPart1Orientation = nearestOrientation;
+        motor.Part1.CFrame = new CFrame(
+            new Vector3(position.x, position.y, position.z),
+            nearestOrientation
+        );
+        this.viewport.syncPartMesh(motor.Part1);
     }
 
     spawnPart(shape = 'Block') {
@@ -788,6 +950,37 @@ export class StudioApp {
     }
 
     startSimulation(mode = 'Test') {
+        if (this.simulationState !== 'Edit' || this.isStartingSimulation) return;
+        if (mode !== 'Test' && mode !== 'TestHere') {
+            this._startSimulation(mode);
+            return;
+        }
+        this.isStartingSimulation = true;
+        this.starterCharacterPromise.then(() => {
+            this.isStartingSimulation = false;
+            if (!this.characterController.starterCharacterTemplate) {
+                this.outputUI.log('error', `Failed to load StarterCharacter.rbxm: ${this.starterCharacterLoadError.message}`);
+                return;
+            }
+            this._startSimulation(mode);
+        }).catch(error => {
+            this.isStartingSimulation = false;
+            this.outputUI.log('error', `Failed to load StarterCharacter.rbxm: ${error.message}`);
+        });
+    }
+
+    async loadStarterCharacter() {
+        const response = await fetch('/api/starter-character');
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        const { roots } = parseRbxm(new Uint8Array(await response.arrayBuffer()));
+        const template = roots.find(root => root.Name === 'StarterCharacter');
+        if (!template || !template.FindFirstChild('HumanoidRootPart', true)) {
+            throw new Error('RBXM does not contain a valid StarterCharacter model');
+        }
+        this.characterController.starterCharacterTemplate = template;
+    }
+
+    _startSimulation(mode) {
         if (this.simulationState !== 'Edit') return;
 
         this.outputUI.log('info', `--- Simulation Started: ${mode} ---`);
@@ -1272,6 +1465,55 @@ export class StudioApp {
         input.click();
     }
 
+    promptImportModel() {
+        const input = document.createElement('input');
+        input.type = 'file';
+        input.accept = '.rbxm,.rbxl,application/octet-stream';
+        input.addEventListener('change', () => {
+            const file = input.files?.[0];
+            input.remove();
+            if (file) this.importRbxmFile(file);
+        }, { once: true });
+        document.body.appendChild(input);
+        input.click();
+    }
+
+    async importRbxmFile(file) {
+        try {
+            const buffer = new Uint8Array(await file.arrayBuffer());
+            const { roots, instanceCount } = parseRbxm(buffer);
+            if (roots.length === 0) throw new Error('The model contains no instances');
+            const { embeddedCount, failedAssetIds } = await embedRobloxTextures(roots);
+
+            const selected = this.selectedInstance;
+            const parent = selected && selected.IsA && (selected.IsA('Model') || selected.IsA('Folder'))
+                ? selected
+                : this.dataModel.Workspace;
+            for (const root of roots) root.Parent = parent;
+
+            this.viewport.syncAllParts();
+            this.explorerUI.render();
+            const importedRoot = roots[roots.length - 1];
+            this.selectInstance(importedRoot);
+            this.historyManager.recordState();
+
+            const firstPart = importedRoot.IsA('BasePart')
+                ? importedRoot
+                : importedRoot.GetDescendants().find(instance => instance.IsA('BasePart'));
+            if (firstPart) this.viewport.focusOnPart(firstPart);
+
+            this.outputUI.log('info', `Imported ${file.name}: ${instanceCount} instances`);
+            if (embeddedCount > 0) {
+                this.outputUI.log('info', `Embedded ${embeddedCount} Roblox PNG textures into the place`);
+            }
+            if (failedAssetIds.length > 0) {
+                this.outputUI.log('warn', `Could not download Roblox assets ${failedAssetIds.join(', ')}; imported with original textures`);
+            }
+        } catch (error) {
+            this.outputUI.log('error', `Failed to import ${file.name}: ${error.message}`);
+        }
+    }
+
     async loadInitialPlace() {
         const params = new URLSearchParams(location.search);
         const requestedPlace = params.get('place') || 'baseplate.cblx';
@@ -1487,6 +1729,11 @@ export class StudioApp {
         const name = file.name;
         const ext = name.split('.').pop().toLowerCase();
         const mime = file.type || '';
+
+        if (ext === 'rbxm') {
+            this.importRbxmFile(file);
+            return;
+        }
 
         // 1. Audio files: mp3, wav, ogg, m4a, aac, flac
         const isAudio = mime.startsWith('audio/') || ['mp3', 'wav', 'ogg', 'm4a', 'aac', 'flac'].includes(ext);

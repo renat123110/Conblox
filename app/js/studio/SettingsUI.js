@@ -16,7 +16,7 @@ export class SettingsUI {
                 graphicsLevel: 21,
                 shadowQuality: '4096', // 'off', '1024', '2048', '4096'
                 shadowSoftness: 3.2,
-                shadowNormalBias: 0.048,
+                shadowNormalBias: 0.012,
                 shadowFrustumRadius: 48,
                 shadowFollow: true,
                 bloomQuality: 'cinematic', // 'off', 'basic', 'cinematic'
@@ -58,8 +58,10 @@ export class SettingsUI {
             const raw = localStorage.getItem('conblox_studio_settings');
             if (raw) {
                 const parsed = JSON.parse(raw);
+                const rendering = { ...this.defaultSettings.rendering, ...(parsed.rendering || {}) };
+                if (Number(rendering.shadowNormalBias) > 0.025) rendering.shadowNormalBias = 0.012;
                 return {
-                    rendering: { ...this.defaultSettings.rendering, ...(parsed.rendering || {}) },
+                    rendering,
                     physics: { ...this.defaultSettings.physics, ...(parsed.physics || {}) },
                     camera: { ...this.defaultSettings.camera, ...(parsed.camera || {}) },
                     general: { ...this.defaultSettings.general, ...(parsed.general || {}) }
@@ -229,8 +231,8 @@ export class SettingsUI {
                                             <span class="setting-desc">Eliminates surface acne without causing Peter-Panning (floating shadows)</span>
                                         </div>
                                         <div class="setting-slider-group">
-                                            <input type="range" min="0.01" max="0.08" step="0.005" value="0.048" class="studio-slider" id="slider-normal-bias">
-                                            <span class="slider-val-display" id="val-normal-bias">0.048</span>
+                                            <input type="range" min="0.001" max="0.025" step="0.001" value="0.012" class="studio-slider" id="slider-normal-bias">
+                                            <span class="slider-val-display" id="val-normal-bias">0.012</span>
                                         </div>
                                     </div>
 
@@ -601,7 +603,7 @@ export class SettingsUI {
             // Level 1-4: Low / Potato
             this.settings.rendering.shadowQuality = 'off';
             this.settings.rendering.shadowSoftness = 1.0;
-            this.settings.rendering.shadowNormalBias = 0.020;
+            this.settings.rendering.shadowNormalBias = 0.012;
             this.settings.rendering.shadowFrustumRadius = 140;
             this.settings.rendering.bloomQuality = 'off';
             this.settings.rendering.sunRaysSamples = 0;
@@ -610,7 +612,7 @@ export class SettingsUI {
             // Level 5-9: Medium
             this.settings.rendering.shadowQuality = '1024';
             this.settings.rendering.shadowSoftness = 1.8;
-            this.settings.rendering.shadowNormalBias = 0.025;
+            this.settings.rendering.shadowNormalBias = 0.012;
             this.settings.rendering.shadowFrustumRadius = 110;
             this.settings.rendering.bloomQuality = 'basic';
             this.settings.rendering.sunRaysSamples = 12;
@@ -619,7 +621,7 @@ export class SettingsUI {
             // Level 10-15: High (Classic Roblox Studio Max)
             this.settings.rendering.shadowQuality = '2048';
             this.settings.rendering.shadowSoftness = 2.4;
-            this.settings.rendering.shadowNormalBias = 0.035;
+            this.settings.rendering.shadowNormalBias = 0.012;
             this.settings.rendering.shadowFrustumRadius = 80;
             this.settings.rendering.bloomQuality = 'basic';
             this.settings.rendering.sunRaysSamples = 24;
@@ -628,7 +630,7 @@ export class SettingsUI {
             // Level 16-20: Ultra HD (Unity HDRP quality)
             this.settings.rendering.shadowQuality = '4096';
             this.settings.rendering.shadowSoftness = 2.8;
-            this.settings.rendering.shadowNormalBias = 0.045;
+            this.settings.rendering.shadowNormalBias = 0.012;
             this.settings.rendering.shadowFrustumRadius = 60;
             this.settings.rendering.bloomQuality = 'cinematic';
             this.settings.rendering.sunRaysSamples = 36;
@@ -637,7 +639,7 @@ export class SettingsUI {
             // Level 21: Cinematic AAA (Unreal Engine 5 standard)
             this.settings.rendering.shadowQuality = '4096';
             this.settings.rendering.shadowSoftness = 3.2;
-            this.settings.rendering.shadowNormalBias = 0.048;
+            this.settings.rendering.shadowNormalBias = 0.012;
             this.settings.rendering.shadowFrustumRadius = 48;
             this.settings.rendering.bloomQuality = 'cinematic';
             this.settings.rendering.sunRaysSamples = 36;

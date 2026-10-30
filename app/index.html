@@ -65,8 +65,12 @@
             </div>
         </div>
 
-        <!-- Bottom Output Console -->
-        <div class="panel-output" id="panel-output"></div>
+        <!-- Bottom Output and Animation docks -->
+        <div class="output-panel-split" id="output-panel-split"></div>
+        <div class="bottom-dock" id="bottom-dock">
+            <div class="panel-output" id="panel-output"></div>
+            <div class="animation-editor-dock" id="animation-editor-container" hidden></div>
+        </div>
     </div>
 
     <script>
@@ -111,6 +115,14 @@
                 headers: { 'Content-Type': 'application/json' },
                 body: payload
             }).catch(() => {});
+
+            window.setInterval(() => {
+                fetch('/api/app/open', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: payload
+                }).catch(() => {});
+            }, 5000);
 
             window.addEventListener('pagehide', () => {
                 navigator.sendBeacon('/api/app/close', new Blob([payload], { type: 'application/json' }));

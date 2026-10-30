@@ -98,7 +98,6 @@ export class ScriptAutocomplete {
             { label: 'Clouds', kind: 'class', insert: 'Clouds', type: 'Clouds', desc: 'Volumetric dynamic sky clouds.' },
             { label: 'Sound', kind: 'class', insert: 'Sound', type: 'Sound', desc: 'Audio sound source object.' },
             { label: 'Humanoid', kind: 'class', insert: 'Humanoid', type: 'Humanoid', desc: 'Controls character movement, health, and animations.' },
-            { label: 'Attachment', kind: 'class', insert: 'Attachment', type: 'Attachment', desc: 'Rigid attachment point in 3D space.' },
             { label: 'Highlight', kind: 'class', insert: 'Highlight', type: 'Highlight', desc: 'Visual outline and fill highlight effect for objects.' },
             { label: 'Weld', kind: 'class', insert: 'Weld', type: 'Weld', desc: 'Rigid joint connecting two parts together at fixed relative C0/C1 offsets.' },
             { label: 'WeldConstraint', kind: 'class', insert: 'WeldConstraint', type: 'WeldConstraint', desc: 'Physically locks two parts together without altering their relative offset.' },

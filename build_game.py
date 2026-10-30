@@ -44,6 +44,7 @@ def build_exe(place_data, output_dir):
             "--name", game_name, "--paths", str(ROOT), "--distpath", str(output_dir),
             "--workpath", str(temp_path / "work"), "--specpath", str(temp_path),
             "--add-data", f"{APP_DIR};app", "--add-data", f"{bundled_place};places",
+            "--add-data", f"{ROOT / 'StarterCharacter.rbxm'};.",
             str(entry_point),
         ]
         try:

@@ -90,6 +90,74 @@ export class Tool extends Instance {
     }
 }
 
+export class SpecialMesh extends Instance {
+    constructor() {
+        super('SpecialMesh');
+        this.meshType = 'Brick';
+        this.scale = Vector3.one;
+        this.offset = Vector3.zero;
+        this.meshId = '';
+        this.textureId = '';
+        this.vertexColor = Vector3.one;
+    }
+
+    get MeshType() { return this.meshType; }
+    set MeshType(value) {
+        this.meshType = String(value || 'Brick');
+        this.Changed.Fire('MeshType', this.meshType);
+    }
+
+    get Scale() { return this.scale; }
+    set Scale(value) {
+        this.scale = value instanceof Vector3 ? value : Vector3.fromJSON(value);
+        this.Changed.Fire('Scale', this.scale);
+    }
+
+    get Offset() { return this.offset; }
+    set Offset(value) {
+        this.offset = value instanceof Vector3 ? value : Vector3.fromJSON(value);
+        this.Changed.Fire('Offset', this.offset);
+    }
+
+    get MeshId() { return this.meshId; }
+    set MeshId(value) {
+        this.meshId = String(value || '');
+        this.Changed.Fire('MeshId', this.meshId);
+    }
+
+    get TextureId() { return this.textureId; }
+    set TextureId(value) {
+        this.textureId = String(value || '');
+        this.Changed.Fire('TextureId', this.textureId);
+    }
+
+    get VertexColor() { return this.vertexColor; }
+    set VertexColor(value) {
+        this.vertexColor = value instanceof Vector3 ? value : Vector3.fromJSON(value);
+        this.Changed.Fire('VertexColor', this.vertexColor);
+    }
+
+    serializeProperties() {
+        return {
+            meshType: this.meshType,
+            scale: this.scale.toJSON(),
+            offset: this.offset.toJSON(),
+            meshId: this.meshId,
+            textureId: this.textureId,
+            vertexColor: this.vertexColor.toJSON()
+        };
+    }
+
+    deserializeProperties(props) {
+        if (props.meshType !== undefined) this.meshType = props.meshType;
+        if (props.scale) this.scale = Vector3.fromJSON(props.scale);
+        if (props.offset) this.offset = Vector3.fromJSON(props.offset);
+        if (props.meshId !== undefined) this.meshId = props.meshId;
+        if (props.textureId !== undefined) this.textureId = props.textureId;
+        if (props.vertexColor) this.vertexColor = Vector3.fromJSON(props.vertexColor);
+    }
+}
+
 export class Model extends Instance {
     constructor() {
         super('Model');
@@ -776,6 +844,27 @@ export class Decal extends Instance {
     }
 }
 
+export class ParticleEmitter extends Instance {
+    constructor() {
+        super('ParticleEmitter');
+        this.texture = '';
+    }
+
+    get Texture() { return this.texture; }
+    set Texture(value) {
+        this.texture = String(value || '');
+        this.Changed.Fire('Texture', this.texture);
+    }
+
+    serializeProperties() {
+        return { texture: this.texture };
+    }
+
+    deserializeProperties(props) {
+        if (props.texture !== undefined) this.texture = props.texture;
+    }
+}
+
 export class Texture extends Decal {
     constructor() {
         super('Texture');
@@ -1004,6 +1093,12 @@ export class JointInstance extends Instance {
         this.Changed.Fire('Enabled', this.enabled);
     }
 
+    getRootInstance() {
+        let root = this;
+        while (root.Parent) root = root.Parent;
+        return root;
+    }
+
     serializeProperties() {
         return {
             part0Id: this.part0?.id || null,
@@ -1022,20 +1117,16 @@ export class JointInstance extends Instance {
         if (props.c1) this.c1 = CFrame.fromJSON(props.c1);
         if (props.part0Id || props.part0Name) {
             setTimeout(() => {
-                const root = this.GetRoot ? this.GetRoot() : null;
-                if (root && root.GetDescendants) {
-                    const all = root.GetDescendants();
-                    this.part0 = all.find(i => i.id === props.part0Id || i.Name === props.part0Name) || null;
-                }
+                const root = this.getRootInstance();
+                const all = [root, ...root.GetDescendants()];
+                this.Part0 = all.find(i => i.id === props.part0Id || i.Name === props.part0Name) || null;
             }, 0);
         }
         if (props.part1Id || props.part1Name) {
             setTimeout(() => {
-                const root = this.GetRoot ? this.GetRoot() : null;
-                if (root && root.GetDescendants) {
-                    const all = root.GetDescendants();
-                    this.part1 = all.find(i => i.id === props.part1Id || i.Name === props.part1Name) || null;
-                }
+                const root = this.getRootInstance();
+                const all = [root, ...root.GetDescendants()];
+                this.Part1 = all.find(i => i.id === props.part1Id || i.Name === props.part1Name) || null;
             }, 0);
         }
     }
@@ -1064,19 +1155,22 @@ export class Motor6D extends JointInstance {
 
     get CurrentAngle() { return this.currentAngle; }
     set CurrentAngle(v) {
-        this.currentAngle = Number(v) || 0;
+        const angle = Number(v);
+        this.currentAngle = Number.isFinite(angle) ? angle : 0;
         this.Changed.Fire('CurrentAngle', this.currentAngle);
     }
 
     get DesiredAngle() { return this.desiredAngle; }
     set DesiredAngle(v) {
-        this.desiredAngle = Number(v) || 0;
+        const angle = Number(v);
+        this.desiredAngle = Number.isFinite(angle) ? angle : 0;
         this.Changed.Fire('DesiredAngle', this.desiredAngle);
     }
 
     get MaxVelocity() { return this.maxVelocity; }
     set MaxVelocity(v) {
-        this.maxVelocity = Number(v) || 0.05;
+        const velocity = Number(v);
+        this.maxVelocity = Number.isFinite(velocity) ? Math.max(0, velocity) : 0.05;
         this.Changed.Fire('MaxVelocity', this.maxVelocity);
     }
 
@@ -1092,10 +1186,119 @@ export class Motor6D extends JointInstance {
 
     deserializeProperties(props) {
         super.deserializeProperties(props);
-        if (props.transform) this.transform = CFrame.fromJSON(props.transform);
-        if (props.currentAngle !== undefined) this.currentAngle = Number(props.currentAngle) || 0;
-        if (props.desiredAngle !== undefined) this.desiredAngle = Number(props.desiredAngle) || 0;
-        if (props.maxVelocity !== undefined) this.maxVelocity = Number(props.maxVelocity) || 0.05;
+        if (props.transform) this.Transform = CFrame.fromJSON(props.transform);
+        if (props.currentAngle !== undefined) this.CurrentAngle = props.currentAngle;
+        if (props.desiredAngle !== undefined) this.DesiredAngle = props.desiredAngle;
+        if (props.maxVelocity !== undefined) this.MaxVelocity = props.maxVelocity;
+    }
+}
+
+export class Keyframe extends Instance {
+    constructor() {
+        super('Keyframe');
+        this.time = 0;
+        this.cframe = new CFrame();
+    }
+
+    get Time() { return this.time; }
+    set Time(value) {
+        const time = Number(value);
+        this.time = Number.isFinite(time) ? Math.max(0, time) : 0;
+        this.Changed.Fire('Time', this.time);
+    }
+
+    get CFrame() { return this.cframe; }
+    set CFrame(value) {
+        this.cframe = value instanceof CFrame ? value : CFrame.fromJSON(value);
+        this.Changed.Fire('CFrame', this.cframe);
+    }
+
+    get Position() { return this.cframe.position; }
+    get Orientation() { return this.cframe.orientation; }
+
+    serializeProperties() {
+        return { time: this.time, cframe: this.cframe.toJSON() };
+    }
+
+    deserializeProperties(props) {
+        if (props.time !== undefined) this.Time = props.time;
+        if (props.cframe) this.CFrame = CFrame.fromJSON(props.cframe);
+    }
+}
+
+export class KeyframeSequence extends Instance {
+    constructor() {
+        super('KeyframeSequence');
+        this.loop = false;
+        this.priority = 'Action';
+        this.duration = 0;
+    }
+
+    get Loop() { return this.loop; }
+    set Loop(value) {
+        this.loop = Boolean(value);
+        this.Changed.Fire('Loop', this.loop);
+    }
+
+    get Priority() { return this.priority; }
+    set Priority(value) {
+        this.priority = String(value || 'Action');
+        this.Changed.Fire('Priority', this.priority);
+    }
+
+    get Length() {
+        return Math.max(this.duration, this.GetKeyframes().reduce((length, keyframe) => Math.max(length, keyframe.Time), 0));
+    }
+
+    get Duration() { return this.duration; }
+    set Duration(value) {
+        const duration = Number(value);
+        this.duration = Number.isFinite(duration) ? Math.max(0, duration) : 0;
+        this.Changed.Fire('Duration', this.duration);
+    }
+
+    GetKeyframes() {
+        return this.GetDescendants().filter(instance => instance.ClassName === 'Keyframe');
+    }
+
+    serializeProperties() {
+        return { loop: this.loop, priority: this.priority, duration: this.duration };
+    }
+
+    deserializeProperties(props) {
+        if (props.loop !== undefined) this.Loop = props.loop;
+        if (props.priority !== undefined) this.Priority = props.priority;
+        if (props.duration !== undefined) this.Duration = props.duration;
+    }
+}
+
+export class Pose extends Instance {
+    constructor() {
+        super('Pose');
+        this.cframe = new CFrame();
+        this.weight = 1;
+    }
+
+    get CFrame() { return this.cframe; }
+    set CFrame(value) {
+        this.cframe = value instanceof CFrame ? value : CFrame.fromJSON(value);
+        this.Changed.Fire('CFrame', this.cframe);
+    }
+
+    get Weight() { return this.weight; }
+    set Weight(value) {
+        const weight = Number(value);
+        this.weight = Number.isFinite(weight) ? Math.max(0, weight) : 1;
+        this.Changed.Fire('Weight', this.weight);
+    }
+
+    serializeProperties() {
+        return { cframe: this.cframe.toJSON(), weight: this.weight };
+    }
+
+    deserializeProperties(props) {
+        if (props.cframe) this.CFrame = CFrame.fromJSON(props.cframe);
+        if (props.weight !== undefined) this.Weight = props.weight;
     }
 }
 
@@ -1306,6 +1509,7 @@ export class Terrain extends Instance {
 
 Instance.register('Folder', Folder);
 Instance.register('Tool', Tool);
+Instance.register('SpecialMesh', SpecialMesh);
 Instance.register('Model', Model);
 Instance.register('Script', Script);
 Instance.register('LocalScript', LocalScript);
@@ -1321,11 +1525,15 @@ Instance.register('Sky', Sky);
 Instance.register('SkyBox', SkyBox);
 Instance.register('Clouds', Clouds);
 Instance.register('Decal', Decal);
+Instance.register('ParticleEmitter', ParticleEmitter);
 Instance.register('Texture', Texture);
 Instance.register('Sound', Sound);
 Instance.register('JointInstance', JointInstance);
 Instance.register('Weld', Weld);
 Instance.register('Motor6D', Motor6D);
+Instance.register('Keyframe', Keyframe);
+Instance.register('KeyframeSequence', KeyframeSequence);
+Instance.register('Pose', Pose);
 Instance.register('WeldConstraint', WeldConstraint);
 Instance.register('WeldConstant', WeldConstant);
 Instance.register('Camera', Camera);

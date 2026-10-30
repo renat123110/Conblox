@@ -14,11 +14,10 @@
  *   No animations (static pose per user request).
  */
 
-import { Vector3, Color3 } from './Math3D.js';
+import { Vector3, nearestEulerYXZ } from './Math3D.js';
 import { Instance } from './Instance.js';
 import { Signal } from './Signal.js';
-import { Model, Folder, Tool, Humanoid, Decal, Motor6D } from './OtherInstances.js';
-import { Part } from './BasePart.js';
+import { Model, Folder, Tool } from './OtherInstances.js';
 import { nativeInputManager } from './NativeInputManager.js';
 
 export class CharacterController {
@@ -32,6 +31,7 @@ export class CharacterController {
         this.humanoid = null;
         this.rootPart = null;
         this.parts = {};
+        this.starterCharacterTemplate = null;
         this.active = false;
         this.isPaused = false;
         this.isDead = false;
@@ -100,165 +100,43 @@ export class CharacterController {
             spawnZ = sp.Position.z;
         }
 
-        // R6 character total height = 5 studs (legs 2 + torso 2 + head 1.25)
-        // RootPart center Y = spawnSurfaceY + 2.5
-        const rootCenterY = atPosition ? atPosition.y : spawnSurfaceY + 2.5;
+        const rootCenterY = atPosition ? atPosition.y : spawnSurfaceY + 3;
         if (atPosition) {
             spawnX = atPosition.x;
             spawnZ = atPosition.z;
         }
 
-        // Create Character Model
-        const char = new Model();
+        const char = this.starterCharacterTemplate.Clone();
+        if (!char) throw new Error('StarterCharacter.rbxm could not be cloned');
         char.Name = 'Player';
+        this.humanoid = char.FindFirstChildOfClass('Humanoid', true);
+        const rootPart = char.FindFirstChild('HumanoidRootPart', true);
+        const torso = char.FindFirstChild('Torso', true);
+        const head = char.FindFirstChild('Head', true);
+        const leftArm = char.FindFirstChild('Left Arm', true);
+        const rightArm = char.FindFirstChild('Right Arm', true);
+        const leftLeg = char.FindFirstChild('Left Leg', true);
+        const rightLeg = char.FindFirstChild('Right Leg', true);
+        if (!this.humanoid || !rootPart || !torso || !head || !leftArm || !rightArm || !leftLeg || !rightLeg) {
+            throw new Error('StarterCharacter.rbxm is missing required R6 parts');
+        }
+        const faceDecal = head.FindFirstChild('face', true);
+        if (faceDecal) faceDecal.Face = 'Front';
+        head.Orientation = new Vector3(-90, head.Orientation.y, 180);
 
-        // Humanoid
-        this.humanoid = new Humanoid();
         this.humanoid.WalkSpeed = 16;
         this.humanoid.JumpPower = 50;
         this.humanoid.MaxHealth = 100;
         this.humanoid.Health = 100;
-        this.humanoid.Parent = char;
-
-        // HumanoidRootPart (invisible physics collider)
-        const rootPart = new Part();
-        rootPart.Name = 'HumanoidRootPart';
-        rootPart.Size = new Vector3(2, 5, 1);
-        rootPart.Position = new Vector3(spawnX, rootCenterY, spawnZ);
-        rootPart.Transparency = 1;
-        rootPart.Anchored = false;
+        const offset = new Vector3(spawnX, rootCenterY, spawnZ).sub(rootPart.Position);
+        for (const part of char.GetDescendants().filter(instance => instance.IsA('BasePart'))) {
+            part.Position = part.Position.add(offset);
+            part.Anchored = false;
+            part.CanCollide = false;
+            part.Locked = true;
+        }
+        rootPart.Size = new Vector3(2, 6, 1);
         rootPart.CanCollide = true;
-        rootPart.CastShadow = false;
-        rootPart.Locked = true;
-        rootPart.Parent = char;
-
-        // Visible body parts — authentic Roblox R6 character parts
-        const torso = new Part();
-        torso.Name = 'Torso';
-        torso.Size = new Vector3(2, 2, 1);
-        torso.Position = new Vector3(spawnX, rootCenterY + 0.5, spawnZ);
-        torso.Color = Color3.fromRGB(13, 105, 172);
-        torso.Material = 'SmoothPlastic';
-        torso.Transparency = 0;
-        torso.Anchored = false;
-        torso.CanCollide = false;
-        torso.CastShadow = true;
-        torso.Locked = true;
-        torso.Parent = char;
-
-        const head = new Part();
-        head.Name = 'Head';
-        head.Size = new Vector3(2, 1.25, 1.25);
-        head.Position = new Vector3(spawnX, rootCenterY + 2.1, spawnZ);
-        head.Color = Color3.fromRGB(245, 205, 47);
-        head.Material = 'SmoothPlastic';
-        head.Transparency = 0;
-        head.Anchored = false;
-        head.CanCollide = false;
-        head.CastShadow = true;
-        head.Locked = true;
-        head.Parent = char;
-
-        // Face Decal on Head
-        const face = new Decal();
-        face.Name = 'face';
-        face.Face = 'Front';
-        face.Parent = head;
-
-        const leftArm = new Part();
-        leftArm.Name = 'Left Arm';
-        leftArm.Size = new Vector3(1, 2, 1);
-        leftArm.Position = new Vector3(spawnX - 1.5, rootCenterY + 0.5, spawnZ);
-        leftArm.Color = Color3.fromRGB(245, 205, 47);
-        leftArm.Material = 'SmoothPlastic';
-        leftArm.Transparency = 0;
-        leftArm.Anchored = false;
-        leftArm.CanCollide = false;
-        leftArm.CastShadow = true;
-        leftArm.Locked = true;
-        leftArm.Parent = char;
-
-        const rightArm = new Part();
-        rightArm.Name = 'Right Arm';
-        rightArm.Size = new Vector3(1, 2, 1);
-        rightArm.Position = new Vector3(spawnX + 1.5, rootCenterY + 0.5, spawnZ);
-        rightArm.Color = Color3.fromRGB(245, 205, 47);
-        rightArm.Material = 'SmoothPlastic';
-        rightArm.Transparency = 0;
-        rightArm.Anchored = false;
-        rightArm.CanCollide = false;
-        rightArm.CastShadow = true;
-        rightArm.Locked = true;
-        rightArm.Parent = char;
-
-        const leftLeg = new Part();
-        leftLeg.Name = 'Left Leg';
-        leftLeg.Size = new Vector3(1, 2, 1);
-        leftLeg.Position = new Vector3(spawnX - 0.5, rootCenterY - 1.5, spawnZ);
-        leftLeg.Color = Color3.fromRGB(40, 127, 70);
-        leftLeg.Material = 'SmoothPlastic';
-        leftLeg.Transparency = 0;
-        leftLeg.Anchored = false;
-        leftLeg.CanCollide = false;
-        leftLeg.CastShadow = true;
-        leftLeg.Locked = true;
-        leftLeg.Parent = char;
-
-        const rightLeg = new Part();
-        rightLeg.Name = 'Right Leg';
-        rightLeg.Size = new Vector3(1, 2, 1);
-        rightLeg.Position = new Vector3(spawnX + 0.5, rootCenterY - 1.5, spawnZ);
-        rightLeg.Color = Color3.fromRGB(40, 127, 70);
-        rightLeg.Material = 'SmoothPlastic';
-        rightLeg.Transparency = 0;
-        rightLeg.Anchored = false;
-        rightLeg.CanCollide = false;
-        rightLeg.CastShadow = true;
-        rightLeg.Locked = true;
-        rightLeg.Parent = char;
-
-        // Authentic Roblox R6 Motor6D joints connecting all body parts to HumanoidRootPart
-        // RootJoint: HumanoidRootPart -> Torso
-        const rootJoint = new Motor6D();
-        rootJoint.Name = 'RootJoint';
-        rootJoint.Part0 = rootPart;
-        rootJoint.Part1 = torso;
-        rootJoint.Parent = rootPart;
-
-        // Neck: Torso -> Head
-        const neck = new Motor6D();
-        neck.Name = 'Neck';
-        neck.Part0 = torso;
-        neck.Part1 = head;
-        neck.Parent = torso;
-
-        // Left Shoulder: Torso -> Left Arm
-        const leftShoulder = new Motor6D();
-        leftShoulder.Name = 'Left Shoulder';
-        leftShoulder.Part0 = torso;
-        leftShoulder.Part1 = leftArm;
-        leftShoulder.Parent = torso;
-
-        // Right Shoulder: Torso -> Right Arm
-        const rightShoulder = new Motor6D();
-        rightShoulder.Name = 'Right Shoulder';
-        rightShoulder.Part0 = torso;
-        rightShoulder.Part1 = rightArm;
-        rightShoulder.Parent = torso;
-
-        // Left Hip: Torso -> Left Leg
-        const leftHip = new Motor6D();
-        leftHip.Name = 'Left Hip';
-        leftHip.Part0 = torso;
-        leftHip.Part1 = leftLeg;
-        leftHip.Parent = torso;
-
-        // Right Hip: Torso -> Right Leg
-        const rightHip = new Motor6D();
-        rightHip.Name = 'Right Hip';
-        rightHip.Part0 = torso;
-        rightHip.Part1 = rightLeg;
-        rightHip.Parent = torso;
 
         char.PrimaryPart = rootPart;
         char.Parent = this.dataModel.Workspace;
@@ -887,15 +765,23 @@ export class CharacterController {
 
         const vp = this.viewport || (window.conbloxStudio && window.conbloxStudio.viewport);
 
-        const syncTransform = (part, pos) => {
+        const syncTransform = (part, pos, partOrientation = null) => {
             if (!part) return;
             part.Position = pos;
-            part.Orientation = orientDeg;
+            const orientation = partOrientation || (part === this.parts.head
+                ? new Vector3(-90, orientDeg.y, 180)
+                : orientDeg);
+            part.Orientation = orientation;
             if (vp && vp.partMeshes) {
                 const mesh = vp.partMeshes.get(part);
                 if (mesh) {
                     mesh.position.set(pos.x, pos.y, pos.z);
-                    mesh.rotation.set(0, this.characterYaw, 0, 'XYZ');
+                    mesh.rotation.set(
+                        (orientation.x * Math.PI) / 180,
+                        (orientation.y * Math.PI) / 180,
+                        (orientation.z * Math.PI) / 180,
+                        'YXZ'
+                    );
                     if (this.isFirstPerson) {
                         mesh.visible = false;
                     } else {
@@ -909,16 +795,16 @@ export class CharacterController {
             syncTransform(this.rootPart, new Vector3(cx, cy, cz));
         }
         if (this.parts.torso) {
-            syncTransform(this.parts.torso, worldPos(0, 0.5, 0));
+            syncTransform(this.parts.torso, worldPos(0, 0, 0));
         }
         if (this.parts.head) {
-            syncTransform(this.parts.head, worldPos(0, 2.1, 0));
+            syncTransform(this.parts.head, worldPos(0, 1.5, 0));
         }
         if (this.parts.leftArm) {
-            syncTransform(this.parts.leftArm, worldPos(-1.5, 0.5, 0));
+            syncTransform(this.parts.leftArm, worldPos(-1.5, 0, 0));
         }
         if (this.parts.rightArm) {
-            syncTransform(this.parts.rightArm, worldPos(1.5, 0.5, 0));
+            syncTransform(this.parts.rightArm, worldPos(1.5, 0, 0));
         }
         if (this.character) {
             for (const tool of this.character.GetChildren().filter(child => child.IsA('Tool'))) {
@@ -926,10 +812,58 @@ export class CharacterController {
             }
         }
         if (this.parts.leftLeg) {
-            syncTransform(this.parts.leftLeg, worldPos(-0.5, -1.5, 0));
+            syncTransform(this.parts.leftLeg, worldPos(-0.5, -2, 0));
         }
         if (this.parts.rightLeg) {
-            syncTransform(this.parts.rightLeg, worldPos(0.5, -1.5, 0));
+            syncTransform(this.parts.rightLeg, worldPos(0.5, -2, 0));
+        }
+        if (this.character && typeof THREE !== 'undefined') {
+            const pendingMotors = this.character.GetDescendants().filter(instance => instance.ClassName === 'Motor6D' && instance.Enabled);
+            const applyMotorsFrom = (startParts) => {
+                const knownParts = new Set(startParts);
+                let progressed = true;
+                while (progressed) {
+                    progressed = false;
+                    for (let index = pendingMotors.length - 1; index >= 0; index--) {
+                        const motor = pendingMotors[index];
+                        if (!motor.Part0 || !motor.Part1 || !knownParts.has(motor.Part0)) continue;
+
+                        const toMatrix = (frame) => {
+                            const object = new THREE.Object3D();
+                            object.position.set(frame.position.x, frame.position.y, frame.position.z);
+                            object.rotation.set(
+                                frame.orientation.x * Math.PI / 180,
+                                frame.orientation.y * Math.PI / 180,
+                                frame.orientation.z * Math.PI / 180,
+                                'YXZ'
+                            );
+                            object.updateMatrix();
+                            return object.matrix;
+                        };
+                        const part0 = motor.Part0;
+                        const part1 = motor.Part1;
+                        const part1Matrix = toMatrix({ position: part0.Position, orientation: part0.Orientation })
+                            .multiply(toMatrix(motor.C0))
+                            .multiply(toMatrix(motor.Transform))
+                            .multiply(new THREE.Matrix4().makeRotationX(motor.CurrentAngle))
+                            .multiply(toMatrix(motor.C1).invert());
+                        const position = new THREE.Vector3();
+                        const quaternion = new THREE.Quaternion();
+                        const scale = new THREE.Vector3();
+                        part1Matrix.decompose(position, quaternion, scale);
+                        const euler = new THREE.Euler().setFromQuaternion(quaternion, 'YXZ');
+                        const orientation = nearestEulerYXZ(euler, motor._lastAppliedPart1Orientation || part1.Orientation);
+                        motor._lastAppliedPart1Orientation = orientation;
+                        syncTransform(part1, new Vector3(position.x, position.y, position.z), orientation);
+                        knownParts.add(part1);
+                        pendingMotors.splice(index, 1);
+                        progressed = true;
+                    }
+                }
+            };
+
+            applyMotorsFrom([this.rootPart]);
+            applyMotorsFrom([this.parts.torso]);
         }
     }
 

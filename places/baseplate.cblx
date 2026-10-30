@@ -1,7 +1,7 @@
 {
   "version": "1.0.0",
   "name": "baseplate.cblx",
-  "timestamp": "2026-10-25T22:31:16.028Z",
+  "timestamp": "2026-10-29T11:00:12.477Z",
   "dataModel": {
     "id": "inst_1_0povau",
     "name": "game",
@@ -21,7 +21,7 @@
         "properties": {},
         "children": [
           {
-            "id": "inst_33_7ptqj0",
+            "id": "inst_69_zu4yro",
             "name": "Terrain",
             "className": "Terrain",
             "archivable": true,
@@ -52,7 +52,7 @@
             ]
           },
           {
-            "id": "inst_34_v5d7no",
+            "id": "inst_70_p77av6",
             "name": "Camera",
             "className": "Camera",
             "archivable": true,
@@ -61,13 +61,13 @@
             "properties": {
               "cframe": {
                 "position": {
-                  "x": -13.393822511911042,
-                  "y": 9.425278147642622,
-                  "z": 13.643251793692661
+                  "x": 0,
+                  "y": 15,
+                  "z": 30
                 },
                 "orientation": {
-                  "x": -25.897692339913263,
-                  "y": -42.97183463480977,
+                  "x": -20.397297506657306,
+                  "y": 3.7815214478634336,
                   "z": 0
                 }
               },
@@ -83,10 +83,10 @@
                   "z": 0
                 }
               },
-              "fieldOfView": 73,
+              "fieldOfView": 70,
               "cameraType": "Custom",
-              "cameraSubjectId": null,
-              "cameraSubjectName": null,
+              "cameraSubjectId": "inst_218_xat4oe",
+              "cameraSubjectName": "Humanoid",
               "headLocked": true
             },
             "children": []
@@ -127,11 +127,11 @@
                 "z": 0
               },
               "color": {
-                "r": 0.09803921568627451,
-                "g": 0.09803921568627451,
-                "b": 0.12156862745098039
+                "r": 0.6392156862745098,
+                "g": 0.6352941176470588,
+                "b": 0.6470588235294118
               },
-              "material": "SmoothPlastic",
+              "material": "Plastic",
               "transparency": 0,
               "reflectance": 0,
               "anchored": true,
@@ -153,9 +153,9 @@
                   "face": "Top",
                   "transparency": 0.8,
                   "color": {
-                    "r": 0,
-                    "g": 0,
-                    "b": 0
+                    "r": 1,
+                    "g": 1,
+                    "b": 1
                   },
                   "studsPerTileU": 8,
                   "studsPerTileV": 8
@@ -257,9 +257,9 @@
         "tags": [],
         "properties": {
           "ambient": {
-            "r": 0.5019607843137255,
-            "g": 0.5019607843137255,
-            "b": 0.5019607843137255
+            "r": 1,
+            "g": 1,
+            "b": 1
           },
           "outdoorAmbient": {
             "r": 0.5019607843137255,
@@ -267,7 +267,7 @@
             "b": 0.5019607843137255
           },
           "brightness": 2,
-          "clockTime": 14,
+          "clockTime": 16.3,
           "fogColor": {
             "r": 0.7529411764705882,
             "g": 0.8392156862745098,

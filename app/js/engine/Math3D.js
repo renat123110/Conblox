@@ -95,6 +95,31 @@ export class Vector3 {
     }
 }
 
+export function nearestEulerYXZ(euler, reference = Vector3.zero) {
+    const radiansPerDegree = Math.PI / 180;
+    const previous = [reference.x, reference.y, reference.z].map(value => value * radiansPerDegree);
+    const candidates = [
+        [euler.x, euler.y, euler.z],
+        [Math.PI - euler.x, euler.y + Math.PI, euler.z + Math.PI]
+    ];
+    let bestAngles = null;
+    let bestDistance = Infinity;
+
+    for (const candidate of candidates) {
+        const angles = candidate.map((angle, index) => {
+            const nearestTurn = Math.round((previous[index] - angle) / (Math.PI * 2));
+            return angle + nearestTurn * Math.PI * 2;
+        });
+        const distance = angles.reduce((sum, angle, index) => sum + (angle - previous[index]) ** 2, 0);
+        if (distance < bestDistance) {
+            bestAngles = angles;
+            bestDistance = distance;
+        }
+    }
+
+    return new Vector3(...bestAngles.map(angle => angle / radiansPerDegree));
+}
+
 export class Color3 {
     constructor(r = 1, g = 1, b = 1) {
         // Stored as 0.0 - 1.0

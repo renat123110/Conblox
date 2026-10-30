@@ -7,10 +7,14 @@ Serves the Roblox Studio clone web app and handles place file saving/loading.
 import http.server
 import socketserver
 import socket
+import gzip
+import io
 import os
 import sys
 import json
+import urllib.error
 import urllib.parse
+import urllib.request
 import subprocess
 import shutil
 import time
@@ -19,6 +23,9 @@ import threading
 import ctypes
 from ctypes import wintypes
 import atexit
+import hashlib
+import struct
+import base64
 
 # Safe stdout / stderr for GUI / pythonw execution without console
 if sys.stdout is None:
@@ -33,6 +40,7 @@ if sys.stderr is None:
     sys.stderr = _DummyWriter()
 
 PORT = 28888
+MAX_ROBLOX_IMAGE_BYTES = 16 * 1024 * 1024
 BASE_DIR = getattr(sys, "_MEIPASS", os.path.dirname(os.path.abspath(__file__)))
 APP_DIR = os.path.join(BASE_DIR, "app")
 PLACES_DIR = os.path.join(BASE_DIR, "places")
@@ -53,27 +61,85 @@ def _resolve_place_path(relative_path):
 ACTIVE_SERVER_SESSIONS = {}
 MULTIPLAYER_ROOMS = {}
 MULTIPLAYER_LOCK = threading.Lock()
-APP_CLIENTS = set()
+WS_MAGIC = b"258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
+
+def _make_ws_frame(payload, opcode=1):
+    if isinstance(payload, str):
+        data = payload.encode("utf-8")
+    else:
+        data = bytes(payload)
+    length = len(data)
+    hdr = bytearray([0x80 | (opcode & 0x0F)])
+    if length <= 125:
+        hdr.append(length)
+    elif length <= 65535:
+        hdr.append(126)
+        hdr.extend(struct.pack(">H", length))
+    else:
+        hdr.append(127)
+        hdr.extend(struct.pack(">Q", length))
+    return bytes(hdr) + data
+
+def _read_ws_frame(sock):
+    try:
+        header = sock.recv(2)
+        if not header or len(header) < 2:
+            return None, None
+        b0, b1 = header[0], header[1]
+        opcode = b0 & 0x0F
+        masked = bool(b1 & 0x80)
+        length = b1 & 0x7F
+        if length == 126:
+            raw_len = sock.recv(2)
+            if len(raw_len) < 2:
+                return None, None
+            length = struct.unpack(">H", raw_len)[0]
+        elif length == 127:
+            raw_len = sock.recv(8)
+            if len(raw_len) < 8:
+                return None, None
+            length = struct.unpack(">Q", raw_len)[0]
+        mask = sock.recv(4) if masked else None
+        if masked and (not mask or len(mask) < 4):
+            return None, None
+        payload = bytearray()
+        while len(payload) < length:
+            chunk = sock.recv(min(4096, length - len(payload)))
+            if not chunk:
+                return None, None
+            payload.extend(chunk)
+        if masked:
+            for i in range(len(payload)):
+                payload[i] ^= mask[i % 4]
+        return opcode, bytes(payload)
+    except OSError:
+        return None, None
+APP_CLIENTS = {}
 APP_CLIENT_LOCK = threading.Lock()
 APP_SHUTDOWN_TIMER = None
+APP_CLIENT_TTL = 15.0
 
-def _schedule_app_shutdown(httpd):
+def _schedule_app_shutdown(httpd, delay=3.0):
     global APP_SHUTDOWN_TIMER
 
     def shutdown_if_unused():
         global APP_SHUTDOWN_TIMER
         with APP_CLIENT_LOCK:
             APP_SHUTDOWN_TIMER = None
-            if APP_CLIENTS:
-                return
-        httpd.shutdown()
+            cutoff = time.monotonic() - APP_CLIENT_TTL
+            for client_id, last_seen in list(APP_CLIENTS.items()):
+                if last_seen < cutoff:
+                    APP_CLIENTS.pop(client_id, None)
+            has_clients = bool(APP_CLIENTS)
+        if has_clients:
+            _schedule_app_shutdown(httpd, 5.0)
+        else:
+            httpd.shutdown()
 
     with APP_CLIENT_LOCK:
-        if APP_CLIENTS:
-            return
         if APP_SHUTDOWN_TIMER:
-            APP_SHUTDOWN_TIMER.cancel()
-        APP_SHUTDOWN_TIMER = threading.Timer(3.0, shutdown_if_unused)
+            return
+        APP_SHUTDOWN_TIMER = threading.Timer(delay, shutdown_if_unused)
         APP_SHUTDOWN_TIMER.daemon = True
         APP_SHUTDOWN_TIMER.start()
 
@@ -217,6 +283,51 @@ class ConbloxRequestHandler(http.server.SimpleHTTPRequestHandler):
     def do_GET(self):
         parsed = urllib.parse.urlparse(self.path)
 
+        if parsed.path == "/api/roblox-asset":
+            asset_id = urllib.parse.parse_qs(parsed.query).get("id", [""])[0]
+            if not re.fullmatch(r"\d{1,20}", asset_id):
+                self.send_json_response({"error": "Invalid Roblox asset ID"}, status=400)
+                return
+
+            asset_url = f"https://assetdelivery.roblox.com/v1/asset/?id={asset_id}"
+            request = urllib.request.Request(
+                asset_url,
+                headers={"User-Agent": "ConbloxStudio/1.0", "Accept-Encoding": "identity"}
+            )
+            try:
+                for attempt in range(3):
+                    try:
+                        with urllib.request.urlopen(request, timeout=60) as response:
+                            payload = response.read(MAX_ROBLOX_IMAGE_BYTES + 1)
+                            is_gzip = response.headers.get("Content-Encoding", "").lower() == "gzip"
+                        break
+                    except (urllib.error.URLError, TimeoutError, OSError):
+                        if attempt == 2:
+                            raise
+                        time.sleep(0.5 * (attempt + 1))
+                if len(payload) > MAX_ROBLOX_IMAGE_BYTES:
+                    self.send_json_response({"error": "Roblox asset is too large"}, status=413)
+                    return
+                if is_gzip or payload.startswith(b"\x1f\x8b"):
+                    with gzip.GzipFile(fileobj=io.BytesIO(payload)) as compressed:
+                        payload = compressed.read(MAX_ROBLOX_IMAGE_BYTES + 1)
+                if len(payload) > MAX_ROBLOX_IMAGE_BYTES:
+                    self.send_json_response({"error": "Roblox image is too large"}, status=413)
+                    return
+                if not payload.startswith(b"\x89PNG\r\n\x1a\n"):
+                    self.send_json_response({"error": "Roblox asset is not a PNG image"}, status=415)
+                    return
+
+                self.send_response(200)
+                self.send_header("Content-Type", "image/png")
+                self.send_header("Content-Disposition", f'inline; filename="{asset_id}.png"')
+                self.send_header("Content-Length", str(len(payload)))
+                self.end_headers()
+                self.wfile.write(payload)
+            except Exception as error:
+                self.send_json_response({"error": f"Failed to download Roblox asset: {error}"}, status=502)
+            return
+
         if parsed.path == "/api/native/status":
             self.send_json_response({
                 "nativeHost": True,
@@ -224,6 +335,37 @@ class ConbloxRequestHandler(http.server.SimpleHTTPRequestHandler):
                 "canCapture": user32 is not None,
                 "isLocked": NATIVE_MOUSE.is_locked
             })
+            return
+
+        if parsed.path == "/api/starter-character":
+            candidates = [
+                os.path.join(BASE_DIR, "StarterCharacter.rbxm"),
+                os.path.join(APP_DIR, "StarterCharacter.rbxm"),
+                os.path.join(APP_DIR, "content", "StarterCharacter.rbxm"),
+                os.path.join(os.path.dirname(BASE_DIR), "Conblox", "StarterCharacter.rbxm"),
+                os.path.join(os.path.dirname(BASE_DIR), "conblox", "StarterCharacter.rbxm"),
+                "/opt/Conblox/StarterCharacter.rbxm",
+                "/opt/conblox/StarterCharacter.rbxm",
+            ]
+            character_path = None
+            for cand in candidates:
+                if os.path.isfile(cand):
+                    character_path = cand
+                    break
+
+            if character_path:
+                try:
+                    with open(character_path, "rb") as character_file:
+                        payload = character_file.read()
+                    self.send_response(200)
+                    self.send_header("Content-Type", "application/octet-stream")
+                    self.send_header("Content-Length", str(len(payload)))
+                    self.end_headers()
+                    self.wfile.write(payload)
+                    return
+                except OSError:
+                    pass
+            self.send_json_response({"error": "StarterCharacter.rbxm is missing"}, status=404)
             return
 
         if parsed.path == "/api/places":
@@ -257,6 +399,15 @@ class ConbloxRequestHandler(http.server.SimpleHTTPRequestHandler):
                 self.send_json_response(content)
             else:
                 self.send_json_response({"error": "File not found"}, status=404)
+            return
+
+        if parsed.path == "/api/multiplayer/ws":
+            self.close_connection = True
+            upgrade = self.headers.get("Upgrade", "").lower()
+            if upgrade == "websocket":
+                self.handle_multiplayer_websocket()
+                return
+            self.send_error(400, "Expected WebSocket upgrade")
             return
 
         super().do_GET()
@@ -308,14 +459,16 @@ class ConbloxRequestHandler(http.server.SimpleHTTPRequestHandler):
                     raise ValueError("Invalid player ID")
 
                 now = time.monotonic()
+                now_ms = time.time() * 1000
                 with MULTIPLAYER_LOCK:
-                    room = MULTIPLAYER_ROOMS.get(room_id, {})
-                    room = {
-                        key: player for key, player in room.items()
-                        if now - player["updatedAt"] < 15 and key != player_id
-                    }
+                    room_data = MULTIPLAYER_ROOMS.setdefault(room_id, {"players": {}, "sockets": {}})
+                    players = room_data["players"]
+                    cutoff = now - 15.0
+                    for key, player in list(players.items()):
+                        if player["updatedAt"] < cutoff and key != player_id:
+                            players.pop(key, None)
                     if action == "leave":
-                        MULTIPLAYER_ROOMS[room_id] = room
+                        players.pop(player_id, None)
                     else:
                         position = payload.get("position")
                         if not isinstance(position, dict):
@@ -328,24 +481,25 @@ class ConbloxRequestHandler(http.server.SimpleHTTPRequestHandler):
                         yaw = float(payload.get("yaw", 0))
                         if not all(map(lambda value: abs(value) < 100000, coords + [yaw])) or not all(map(lambda value: abs(value) < 500, velocities)):
                             raise ValueError("Invalid player transform")
-                        if len(room) >= 32 and player_id not in room:
+                        if len(players) >= 32 and player_id not in players:
                             raise ValueError("Room is full")
-                        room[player_id] = {
+                        players[player_id] = {
                             "id": player_id,
                             "name": str(payload.get("name", "Player"))[:24],
+                            "p": coords,
+                            "v": velocities,
+                            "y": yaw,
                             "position": dict(zip(("x", "y", "z"), coords)),
                             "velocity": dict(zip(("x", "y", "z"), velocities)),
                             "yaw": yaw,
-                            "timestamp": now * 1000,
+                            "timestamp": now_ms,
                             "updatedAt": now,
                         }
-                    if room:
-                        MULTIPLAYER_ROOMS[room_id] = room
-                    else:
+                    if not players and not room_data.get("sockets"):
                         MULTIPLAYER_ROOMS.pop(room_id, None)
-                    players = list(room.values())
+                    players_list = list(players.values())
 
-                self.send_json_response({"success": True, "serverTime": now * 1000, "players": players})
+                self.send_json_response({"success": True, "serverTime": now_ms, "players": players_list})
             except (json.JSONDecodeError, UnicodeDecodeError, TypeError, ValueError) as error:
                 self.send_json_response({"error": str(error)}, status=400)
             return
@@ -365,10 +519,14 @@ class ConbloxRequestHandler(http.server.SimpleHTTPRequestHandler):
             if parsed.path == "/api/app/open":
                 _cancel_app_shutdown()
                 with APP_CLIENT_LOCK:
-                    APP_CLIENTS.add(client_id)
+                    APP_CLIENTS[client_id] = time.monotonic()
+                if getattr(self.server, "auto_shutdown", False):
+                    _schedule_app_shutdown(self.server, APP_CLIENT_TTL)
             else:
+                if getattr(self.server, "auto_shutdown", False):
+                    _cancel_app_shutdown()
                 with APP_CLIENT_LOCK:
-                    APP_CLIENTS.discard(client_id)
+                    APP_CLIENTS.pop(client_id, None)
                 if getattr(self.server, "auto_shutdown", False):
                     _schedule_app_shutdown(self.server)
 
@@ -500,6 +658,193 @@ class ConbloxRequestHandler(http.server.SimpleHTTPRequestHandler):
             return
 
         self.send_json_response({"error": "Endpoint not found"}, status=404)
+
+    def handle_multiplayer_websocket(self):
+        key = self.headers.get("Sec-WebSocket-Key", "")
+        if not key:
+            self.send_error(400, "Missing Sec-WebSocket-Key")
+            return
+
+        accept = base64.b64encode(hashlib.sha1(key.encode("utf-8") + WS_MAGIC).digest()).decode("utf-8")
+        self.send_response(101, "Switching Protocols")
+        self.send_header("Upgrade", "websocket")
+        self.send_header("Connection", "Upgrade")
+        self.send_header("Sec-WebSocket-Accept", accept)
+        self.end_headers()
+        self.wfile.flush()
+
+        sock = self.connection
+        current_room = None
+        current_player_id = None
+        current_player_name = "Player"
+        send_lock = threading.Lock()
+
+        def send_frame(data, opcode=1):
+            try:
+                frame = _make_ws_frame(data, opcode)
+                with send_lock:
+                    sock.sendall(frame)
+            except Exception:
+                pass
+
+        try:
+            while True:
+                opcode, raw_data = _read_ws_frame(sock)
+                if opcode is None or opcode == 8:
+                    break
+                if opcode == 9:
+                    send_frame(raw_data or b"", opcode=10)
+                    continue
+
+                if opcode == 1:
+                    try:
+                        text = raw_data.decode("utf-8", errors="replace")
+                        msg = json.loads(text)
+                    except Exception:
+                        continue
+
+                    msg_type = msg.get("t") or msg.get("type")
+                    now = time.monotonic()
+                    now_ms = time.time() * 1000
+
+                    if msg_type == "join":
+                        room_id = str(msg.get("room") or msg.get("r") or "default")[:48]
+                        player_id = str(msg.get("playerId") or msg.get("id") or "")[:64]
+                        player_name = str(msg.get("name") or "Player")[:24]
+                        if not re.fullmatch(r"[A-Za-z0-9_-]{1,48}", room_id) or not re.fullmatch(r"[A-Za-z0-9_-]{1,64}", player_id):
+                            continue
+
+                        current_room = room_id
+                        current_player_id = player_id
+                        current_player_name = player_name
+
+                        with MULTIPLAYER_LOCK:
+                            room = MULTIPLAYER_ROOMS.setdefault(room_id, {"players": {}, "sockets": {}})
+                            room["sockets"][player_id] = send_frame
+                            players_list = list(room["players"].values())
+                        send_frame(json.dumps({"t": "sync", "st": now_ms, "players": players_list}))
+
+                    elif msg_type == "p":
+                        if not current_room or not current_player_id:
+                            continue
+                        pos = msg.get("p") or msg.get("position")
+                        vel = msg.get("v") or msg.get("velocity")
+                        yaw = float(msg.get("y") or msg.get("yaw") or 0)
+
+                        if isinstance(pos, (list, tuple)) and len(pos) >= 3:
+                            coords = [float(pos[0]), float(pos[1]), float(pos[2])]
+                        elif isinstance(pos, dict):
+                            coords = [float(pos.get("x", 0)), float(pos.get("y", 0)), float(pos.get("z", 0))]
+                        else:
+                            coords = [0.0, 0.0, 0.0]
+
+                        if isinstance(vel, (list, tuple)) and len(vel) >= 3:
+                            velocities = [float(vel[0]), float(vel[1]), float(vel[2])]
+                        elif isinstance(vel, dict):
+                            velocities = [float(vel.get("x", 0)), float(vel.get("y", 0)), float(vel.get("z", 0))]
+                        else:
+                            velocities = [0.0, 0.0, 0.0]
+
+                        player_record = {
+                            "id": current_player_id,
+                            "name": current_player_name,
+                            "p": coords,
+                            "v": velocities,
+                            "y": yaw,
+                            "position": dict(zip(("x", "y", "z"), coords)),
+                            "velocity": dict(zip(("x", "y", "z"), velocities)),
+                            "yaw": yaw,
+                            "timestamp": now_ms,
+                            "updatedAt": now,
+                        }
+
+                        with MULTIPLAYER_LOCK:
+                            room = MULTIPLAYER_ROOMS.get(current_room)
+                            if not room:
+                                continue
+                            room["players"][current_player_id] = player_record
+                            cutoff = now - 15.0
+                            for pid, pdata in list(room["players"].items()):
+                                if pdata.get("updatedAt", 0) < cutoff and pid != current_player_id:
+                                    room["players"].pop(pid, None)
+                                    room["sockets"].pop(pid, None)
+                            other_sockets = [s for pid, s in room["sockets"].items() if pid != current_player_id]
+
+                        broadcast_data = json.dumps({
+                            "t": "p",
+                            "id": current_player_id,
+                            "p": coords,
+                            "v": velocities,
+                            "y": yaw,
+                            "ts": now_ms,
+                            "timestamp": now_ms
+                        })
+                        for s_fn in other_sockets:
+                            s_fn(broadcast_data)
+
+                    elif msg_type == "leave":
+                        break
+
+                elif opcode == 2:
+                    if not current_room or not current_player_id:
+                        continue
+                    if len(raw_data) >= 37:
+                        op, px, py, pz, vx, vy, vz, yaw, client_time = struct.unpack("<Bfffffff d", raw_data[:37])
+                        now = time.monotonic()
+                        now_ms = time.time() * 1000
+                        coords = [px, py, pz]
+                        velocities = [vx, vy, vz]
+                        player_record = {
+                            "id": current_player_id,
+                            "name": current_player_name,
+                            "p": coords,
+                            "v": velocities,
+                            "y": yaw,
+                            "position": dict(zip(("x", "y", "z"), coords)),
+                            "velocity": dict(zip(("x", "y", "z"), velocities)),
+                            "yaw": yaw,
+                            "timestamp": now_ms,
+                            "updatedAt": now,
+                        }
+                        with MULTIPLAYER_LOCK:
+                            room = MULTIPLAYER_ROOMS.get(current_room)
+                            if not room:
+                                continue
+                            room["players"][current_player_id] = player_record
+                            other_sockets = [s for pid, s in room["sockets"].items() if pid != current_player_id]
+
+                        broadcast_data = json.dumps({
+                            "t": "p",
+                            "id": current_player_id,
+                            "p": coords,
+                            "v": velocities,
+                            "y": yaw,
+                            "ts": now_ms,
+                            "timestamp": now_ms
+                        })
+                        for s_fn in other_sockets:
+                            s_fn(broadcast_data)
+
+        finally:
+            self.close_connection = True
+            if current_room and current_player_id:
+                with MULTIPLAYER_LOCK:
+                    room = MULTIPLAYER_ROOMS.get(current_room)
+                    if room:
+                        room["players"].pop(current_player_id, None)
+                        room["sockets"].pop(current_player_id, None)
+                        other_sockets = list(room["sockets"].values())
+                        if not room["players"] and not room["sockets"]:
+                            MULTIPLAYER_ROOMS.pop(current_room, None)
+                    else:
+                        other_sockets = []
+                leave_msg = json.dumps({"t": "leave", "id": current_player_id})
+                for s_fn in other_sockets:
+                    s_fn(leave_msg)
+            try:
+                sock.close()
+            except Exception:
+                pass
 
 def launch_app_window(url):
     """Launch Chrome or Edge in dedicated application mode for a desktop feel, fallback to default browser"""

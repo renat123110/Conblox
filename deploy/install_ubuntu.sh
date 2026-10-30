@@ -17,6 +17,7 @@ fi
 
 install -d -o conblox -g conblox "${INSTALL_DIR}" "${INSTALL_DIR}/places"
 cp -a "${SCRIPT_DIR}/app" "${SCRIPT_DIR}/server.py" "${SCRIPT_DIR}/places" "${INSTALL_DIR}/"
+cp -a "${SCRIPT_DIR}"/*.rbxm "${SCRIPT_DIR}"/*.obj "${INSTALL_DIR}/" 2>/dev/null || true
 chown -R conblox:conblox "${INSTALL_DIR}"
 install -m 0644 "${SCRIPT_DIR}/deploy/conblox.service" /etc/systemd/system/conblox.service
 systemctl daemon-reload

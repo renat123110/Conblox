@@ -71,6 +71,7 @@ export class RibbonUI {
                 <button class="ribbon-tab" data-tab="model">Model</button>
                 <button class="ribbon-tab" data-tab="test">Test</button>
                 <button class="ribbon-tab" data-tab="view">View</button>
+                <button class="ribbon-tab" data-tab="avatar">Avatar</button>
             </div>
 
             <!-- Ribbon Content -->
@@ -290,6 +291,19 @@ export class RibbonUI {
                         <div class="ribbon-group-label">Panels</div>
                     </div>
                 </div>
+
+                <!-- AVATAR TAB -->
+                <div class="ribbon-tab-pane" id="pane-avatar">
+                    <div class="ribbon-group">
+                        <div class="ribbon-group-content">
+                            <button class="ribbon-big-btn" id="btn-animation-editor" title="Open Animation Editor">
+                                <i data-lucide="clapperboard"></i>
+                                <span>Animation Editor</span>
+                            </button>
+                        </div>
+                        <div class="ribbon-group-label">Animation</div>
+                    </div>
+                </div>
             </div>
 
             <!-- File Dropdown Menu Modal -->
@@ -297,6 +311,7 @@ export class RibbonUI {
                 <div class="file-menu-item" id="fm-new"><i data-lucide="file-plus"></i> New Place</div>
                 <div class="file-menu-item" id="fm-save"><i data-lucide="save"></i> Save Place (Ctrl+S)</div>
                 <div class="file-menu-item" id="fm-load"><i data-lucide="folder-open"></i> Open Place...</div>
+                <div class="file-menu-item" id="fm-import-model"><i data-lucide="package-open"></i> Import Model (.rbxm, .rbxl)...</div>
                 <div class="file-menu-item" id="fm-export"><i data-lucide="package"></i> Export Game (.exe)</div>
                 <div class="file-menu-divider"></div>
                 <div class="file-menu-item" id="fm-template-baseplate"><i data-lucide="grid"></i> Template: Classic Baseplate</div>
@@ -473,6 +488,10 @@ export class RibbonUI {
             fileMenu.style.display = 'none';
             this.app.promptLoadPlace();
         });
+        this.container.querySelector('#fm-import-model').addEventListener('click', () => {
+            fileMenu.style.display = 'none';
+            this.app.promptImportModel();
+        });
         this.container.querySelector('#fm-export').addEventListener('click', () => {
             fileMenu.style.display = 'none';
             this.app.exportGame();
@@ -512,6 +531,7 @@ export class RibbonUI {
         this.container.querySelector('#btn-toggle-properties').addEventListener('click', () => this.app.togglePanel('properties'));
         this.container.querySelector('#btn-toggle-output').addEventListener('click', () => this.app.togglePanel('output'));
         this.container.querySelector('#btn-toggle-fullscreen').addEventListener('click', () => this.app.toggleFullscreen());
+        this.container.querySelector('#btn-animation-editor').addEventListener('click', () => this.app.openAnimationEditor());
     }
 
     setSimulationState(state) {

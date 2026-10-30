@@ -4,7 +4,7 @@
  */
 
 import { Part, SpawnLocation } from '../engine/BasePart.js';
-import { Model, Folder, Tool, Script, LocalScript, PointLight, SpotLight, SurfaceLight, Humanoid, BloomEffect, Atmosphere, DepthOfFieldEffect, SunRaysEffect, Sky, SkyBox, Clouds, Decal, Texture, Sound, Weld, WeldConstraint, WeldConstant, Motor6D } from '../engine/OtherInstances.js';
+import { Model, Folder, Tool, Script, LocalScript, PointLight, SpotLight, SurfaceLight, Humanoid, BloomEffect, Atmosphere, DepthOfFieldEffect, SunRaysEffect, Sky, SkyBox, Clouds, Decal, Texture, Sound, Weld, WeldConstraint, WeldConstant, Motor6D, Keyframe, KeyframeSequence } from '../engine/OtherInstances.js';
 import { TemplateManager } from './TemplateManager.js';
 import { Vector3, Color3 } from '../engine/Math3D.js';
 
@@ -109,6 +109,11 @@ export class ExplorerUI {
         }
         if (dm.DescendantAdded) {
             this._dmDescendantAddedConn = dm.DescendantAdded.Connect((descendant) => {
+                for (const addedInstance of [descendant, ...descendant.GetDescendants()]) {
+                    if (addedInstance.GetChildren().length > 0) {
+                        this.collapsedNodes.add(addedInstance.id);
+                    }
+                }
                 if (descendant && descendant.Changed) {
                     descendant.Changed.Connect((prop) => {
                         if (prop === 'Name') this.requestRender();
@@ -218,7 +223,9 @@ export class ExplorerUI {
                 { name: 'Weld', icon: 'link', create: () => this.createWeldIn(targetInst) },
                 { name: 'WeldConstraint', icon: 'link-2', create: () => this.createWeldConstraintIn(targetInst) },
                 { name: 'WeldConstant', icon: 'link-2', create: () => this.createWeldConstantIn(targetInst) },
-                { name: 'Motor6D', icon: 'rotate-cw', create: () => this.createMotor6DIn(targetInst) }
+                { name: 'Motor6D', icon: 'rotate-cw', create: () => this.createMotor6DIn(targetInst) },
+                { name: 'KeyframeSequence', icon: 'film', create: () => this.createKeyframeSequenceIn(targetInst) },
+                { name: 'Keyframe', icon: 'circle-dot', create: () => this.createKeyframeIn(targetInst) }
             );
         }
 
@@ -422,12 +429,43 @@ export class ExplorerUI {
     createMotor6DIn(parent) {
         const m = new Motor6D();
         m.Name = 'Motor6D';
+        const parentIsPart = parent.IsA && parent.IsA('BasePart');
+        const candidateParts = parentIsPart
+            ? [parent, ...(parent.Parent ? parent.Parent.GetDescendants() : []).filter(instance => instance.IsA && instance.IsA('BasePart') && instance !== parent)]
+            : parent.GetDescendants().filter(instance => instance.IsA && instance.IsA('BasePart'));
+        if (parentIsPart) {
+            m.Part0 = parent;
+            m.Part1 = candidateParts.find(part => part !== parent) || null;
+        } else if (candidateParts.length === 2) {
+            [m.Part0, m.Part1] = candidateParts;
+        }
         m.Parent = parent;
         this.expandNode(parent);
         this.setSelected(m);
         if (this.onSelect) this.onSelect(m);
         window.conbloxStudio?.historyManager?.recordState();
         return m;
+    }
+
+    createKeyframeSequenceIn(parent) {
+        const sequence = new KeyframeSequence();
+        sequence.Parent = parent;
+        this.expandNode(parent);
+        this.setSelected(sequence);
+        if (this.onSelect) this.onSelect(sequence);
+        window.conbloxStudio?.historyManager?.recordState();
+        return sequence;
+    }
+
+    createKeyframeIn(parent) {
+        const keyframe = new Keyframe();
+        keyframe.Time = parent.ClassName === 'KeyframeSequence' ? parent.Length : 0;
+        keyframe.Parent = parent;
+        this.expandNode(parent);
+        this.setSelected(keyframe);
+        if (this.onSelect) this.onSelect(keyframe);
+        window.conbloxStudio?.historyManager?.recordState();
+        return keyframe;
     }
 
     createBloomIn(parent) {

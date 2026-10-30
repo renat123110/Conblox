@@ -45,15 +45,15 @@ export class GizmoManager {
 
         // 1. Three.js TransformControls for Translate and Rotate
         this.controls = new THREE.TransformControls(this.viewport.camera, this.viewport.renderer.domElement);
-        this.controls.size = 0.85;
+        this.controls.size = 1.5;
         this.controls.setSpace('local');
         this.viewport.scene.add(this.controls);
+        this.thickenTransformHandles();
 
         // Dedicated pivot object for positioning the gizmo at the exact bounding box center of Models / multi-selections
         this.pivotObject = new THREE.Object3D();
         this.pivotObject.name = 'ConbloxGizmoPivot';
         this.viewport.scene.add(this.pivotObject);
-        this.initRotateSnapGuides();
 
         // Ctrl+L to toggle between Local and World coordinate space (Roblox standard)
         window.addEventListener('keydown', (e) => {
@@ -82,7 +82,6 @@ export class GizmoManager {
                 }
                 this.multiDragAnchorStartPos = this.pivotObject.position.clone();
                 this.multiDragAnchorStartQuat = this.pivotObject.quaternion.clone();
-                this.clearRotateSnapArc();
             } else {
                 // Drag ended: protect click selection
                 this.viewport.justFinishedTransformDrag = true;
@@ -91,8 +90,6 @@ export class GizmoManager {
                 }, 150);
 
                 this.updatePivotPosition();
-                this.clearRotateSnapArc();
-
                 if (this.onTransformEnd && this.targetPart) {
                     this.onTransformEnd(this.targetPart);
                 }
@@ -104,8 +101,6 @@ export class GizmoManager {
             if (!this.pivotObject || !this.controls.object) return;
             // CRITICAL: Only mutate part transform when actively dragging!
             if (!this.viewport.isTransformDragging) return;
-            if (this.currentMode === 'rotate') this.updateRotateSnapArc();
-
             if (this.currentMode === 'translate') {
                 const deltaX = this.pivotObject.position.x - this.multiDragAnchorStartPos.x;
                 const deltaY = this.pivotObject.position.y - this.multiDragAnchorStartPos.y;
@@ -161,6 +156,50 @@ export class GizmoManager {
 
         // 2. Roblox Studio 6-Face Scale Tool
         this.initScaleHandles();
+    }
+
+    thickenTransformHandles() {
+        const gizmos = this.controls?._gizmo?.gizmo;
+        if (!gizmos) return;
+
+        const radialScale = {
+            X: new THREE.Vector3(1, 1.45, 1.45),
+            Y: new THREE.Vector3(1.45, 1, 1.45),
+            Z: new THREE.Vector3(1.45, 1.45, 1)
+        };
+        for (const [axis, scale] of Object.entries(radialScale)) {
+            for (const handle of gizmos.translate.children.filter(child => child.name === axis && child.isMesh)) {
+                handle.geometry = handle.geometry.clone();
+                handle.geometry.scale(scale.x, scale.y, scale.z);
+            }
+        }
+
+        const rotateGizmo = gizmos.rotate;
+        for (const line of [...rotateGizmo.children].filter(child => child.userData.rotateRing)) {
+            rotateGizmo.remove(line);
+            line.geometry.dispose();
+            line.material.dispose();
+        }
+        const axisRings = [
+            ['X', 0xff0000, 'y'],
+            ['Y', 0x00ff00, 'x'],
+            ['Z', 0x0000ff, null]
+        ];
+        for (const [axis, color, rotateAxis] of axisRings) {
+            const geometry = new THREE.TorusGeometry(1, 0.018, 8, 96);
+            if (rotateAxis) geometry[`rotate${rotateAxis.toUpperCase()}`](Math.PI / 2);
+            const ring = new THREE.Mesh(geometry, new THREE.MeshBasicMaterial({
+                color,
+                side: THREE.DoubleSide,
+                depthTest: false,
+                depthWrite: false,
+                toneMapped: false
+            }));
+            ring.name = axis;
+            ring.renderOrder = Infinity;
+            ring.frustumCulled = false;
+            rotateGizmo.add(ring);
+        }
     }
 
     initRotateSnapGuides() {
@@ -610,7 +649,6 @@ export class GizmoManager {
         const d = Number(degrees);
         this.rotateSnap = !isNaN(d) && d >= 0 ? d : 5;
         this.updateSnapping();
-        this.updateRotateSnapTicks();
     }
 
     getPivotParts() {
@@ -689,6 +727,12 @@ export class GizmoManager {
 
     updatePivotPosition() {
         if (!this.pivotObject) return;
+        const jointPivot = window.conbloxStudio?.animationEditorUI?.getJointWorldPivot(this.targetPart);
+        if (jointPivot) {
+            this.pivotObject.position.copy(jointPivot);
+            this.pivotObject.quaternion.set(0, 0, 0, 1);
+            return;
+        }
         const parts = this.getPivotParts();
         if (parts.length === 0) return;
         const center = this.computeBoundingBoxCenter(parts);
@@ -760,6 +804,7 @@ export class GizmoManager {
         }
 
         this.updatePivotPosition();
+        this.controls.setMode(this.currentMode);
         this.controls.attach(this.pivotObject);
     }
 
