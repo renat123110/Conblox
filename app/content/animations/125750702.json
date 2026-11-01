@@ -1,0 +1,2880 @@
+{
+  "className": "KeyframeSequence",
+  "name": "jump",
+  "properties": {
+    "Loop": false,
+    "Priority": "Core",
+    "Duration": 0.625
+  },
+  "children": [
+    {
+      "className": "Keyframe",
+      "name": "Keyframe",
+      "properties": {
+        "Time": 0.0
+      },
+      "children": [
+        {
+          "className": "Pose",
+          "name": "HumanoidRootPart",
+          "properties": {
+            "Weight": 1.0,
+            "CFrame": {
+              "position": {
+                "x": 0.0,
+                "y": -0.0,
+                "z": 0.0
+              },
+              "orientation": {
+                "x": 0.0,
+                "y": 0.0,
+                "z": -0.0
+              }
+            }
+          },
+          "children": [
+            {
+              "className": "Pose",
+              "name": "Torso",
+              "properties": {
+                "Weight": 1.0,
+                "CFrame": {
+                  "position": {
+                    "x": 0.0,
+                    "y": -0.0,
+                    "z": 0.0
+                  },
+                  "orientation": {
+                    "x": 0.0,
+                    "y": 0.0,
+                    "z": -0.0
+                  }
+                }
+              },
+              "children": [
+                {
+                  "className": "Pose",
+                  "name": "Right Arm",
+                  "properties": {
+                    "Weight": 1.0,
+                    "CFrame": {
+                      "position": {
+                        "x": 0.0,
+                        "y": 0.0,
+                        "z": 0.0
+                      },
+                      "orientation": {
+                        "x": -2.1001887039696117,
+                        "y": 0.8617097870605122,
+                        "z": -0.35811223426786926
+                      }
+                    }
+                  },
+                  "children": []
+                },
+                {
+                  "className": "Pose",
+                  "name": "Head",
+                  "properties": {
+                    "Weight": 1.0,
+                    "CFrame": {
+                      "position": {
+                        "x": 0.0,
+                        "y": 0.0,
+                        "z": 0.0
+                      },
+                      "orientation": {
+                        "x": 0.0,
+                        "y": 0.0,
+                        "z": 0.0
+                      }
+                    }
+                  },
+                  "children": []
+                },
+                {
+                  "className": "Pose",
+                  "name": "Left Arm",
+                  "properties": {
+                    "Weight": 1.0,
+                    "CFrame": {
+                      "position": {
+                        "x": 0.0,
+                        "y": 0.0,
+                        "z": 0.0
+                      },
+                      "orientation": {
+                        "x": -0.9769403777656274,
+                        "y": -3.7559370524286266,
+                        "z": 0.3584968709998459
+                      }
+                    }
+                  },
+                  "children": []
+                },
+                {
+                  "className": "Pose",
+                  "name": "Left Leg",
+                  "properties": {
+                    "Weight": 1.0,
+                    "CFrame": {
+                      "position": {
+                        "x": 0.0,
+                        "y": 0.0,
+                        "z": 0.000102
+                      },
+                      "orientation": {
+                        "x": -0.0,
+                        "y": 0.0,
+                        "z": 0.0
+                      }
+                    }
+                  },
+                  "children": []
+                },
+                {
+                  "className": "Pose",
+                  "name": "Right Leg",
+                  "properties": {
+                    "Weight": 1.0,
+                    "CFrame": {
+                      "position": {
+                        "x": 0.0,
+                        "y": 0.0,
+                        "z": -0.0
+                      },
+                      "orientation": {
+                        "x": -0.0,
+                        "y": 0.0,
+                        "z": 0.0
+                      }
+                    }
+                  },
+                  "children": []
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "className": "Keyframe",
+      "name": "Keyframe",
+      "properties": {
+        "Time": 0.034722
+      },
+      "children": [
+        {
+          "className": "Pose",
+          "name": "HumanoidRootPart",
+          "properties": {
+            "Weight": 1.0,
+            "CFrame": {
+              "position": {
+                "x": 0.0,
+                "y": -0.0,
+                "z": 0.0
+              },
+              "orientation": {
+                "x": 0.0,
+                "y": 0.0,
+                "z": -0.0
+              }
+            }
+          },
+          "children": [
+            {
+              "className": "Pose",
+              "name": "Torso",
+              "properties": {
+                "Weight": 1.0,
+                "CFrame": {
+                  "position": {
+                    "x": 0.0,
+                    "y": -0.0,
+                    "z": 0.0
+                  },
+                  "orientation": {
+                    "x": 0.0,
+                    "y": 0.0,
+                    "z": -0.0
+                  }
+                }
+              },
+              "children": [
+                {
+                  "className": "Pose",
+                  "name": "Right Arm",
+                  "properties": {
+                    "Weight": 1.0,
+                    "CFrame": {
+                      "position": {
+                        "x": 0.0,
+                        "y": 0.0,
+                        "z": 0.0
+                      },
+                      "orientation": {
+                        "x": -2.1001887039696117,
+                        "y": 0.8617097870605122,
+                        "z": 13.058269727993764
+                      }
+                    }
+                  },
+                  "children": []
+                },
+                {
+                  "className": "Pose",
+                  "name": "Head",
+                  "properties": {
+                    "Weight": 1.0,
+                    "CFrame": {
+                      "position": {
+                        "x": 0.0,
+                        "y": 0.0,
+                        "z": 0.0
+                      },
+                      "orientation": {
+                        "x": 0.1985302732807034,
+                        "y": 0.0,
+                        "z": 0.0
+                      }
+                    }
+                  },
+                  "children": []
+                },
+                {
+                  "className": "Pose",
+                  "name": "Left Arm",
+                  "properties": {
+                    "Weight": 1.0,
+                    "CFrame": {
+                      "position": {
+                        "x": 0.0,
+                        "y": 0.0,
+                        "z": 0.0
+                      },
+                      "orientation": {
+                        "x": -0.9737886532283986,
+                        "y": -3.7561048415348117,
+                        "z": -1.658266777475062
+                      }
+                    }
+                  },
+                  "children": []
+                },
+                {
+                  "className": "Pose",
+                  "name": "Left Leg",
+                  "properties": {
+                    "Weight": 1.0,
+                    "CFrame": {
+                      "position": {
+                        "x": 0.00035,
+                        "y": 0.007097,
+                        "z": 9.5e-05
+                      },
+                      "orientation": {
+                        "x": -0.0,
+                        "y": 0.0,
+                        "z": 0.1871855816337773
+                      }
+                    }
+                  },
+                  "children": []
+                },
+                {
+                  "className": "Pose",
+                  "name": "Right Leg",
+                  "properties": {
+                    "Weight": 1.0,
+                    "CFrame": {
+                      "position": {
+                        "x": -0.00102,
+                        "y": 0.005297,
+                        "z": 3e-06
+                      },
+                      "orientation": {
+                        "x": 0.10364812167030316,
+                        "y": -0.06709346132959026,
+                        "z": -2.4378162697991046
+                      }
+                    }
+                  },
+                  "children": []
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "className": "Keyframe",
+      "name": "Keyframe",
+      "properties": {
+        "Time": 0.069444
+      },
+      "children": [
+        {
+          "className": "Pose",
+          "name": "HumanoidRootPart",
+          "properties": {
+            "Weight": 1.0,
+            "CFrame": {
+              "position": {
+                "x": 0.0,
+                "y": -0.0,
+                "z": 0.0
+              },
+              "orientation": {
+                "x": 0.0,
+                "y": 0.0,
+                "z": -0.0
+              }
+            }
+          },
+          "children": [
+            {
+              "className": "Pose",
+              "name": "Torso",
+              "properties": {
+                "Weight": 1.0,
+                "CFrame": {
+                  "position": {
+                    "x": 0.0,
+                    "y": -0.0,
+                    "z": 0.0
+                  },
+                  "orientation": {
+                    "x": 0.0,
+                    "y": 0.0,
+                    "z": -0.0
+                  }
+                }
+              },
+              "children": [
+                {
+                  "className": "Pose",
+                  "name": "Right Arm",
+                  "properties": {
+                    "Weight": 1.0,
+                    "CFrame": {
+                      "position": {
+                        "x": 0.0,
+                        "y": 0.0,
+                        "z": 0.0
+                      },
+                      "orientation": {
+                        "x": -2.1001887039696117,
+                        "y": 0.8617097870605122,
+                        "z": 28.66633901931744
+                      }
+                    }
+                  },
+                  "children": []
+                },
+                {
+                  "className": "Pose",
+                  "name": "Head",
+                  "properties": {
+                    "Weight": 1.0,
+                    "CFrame": {
+                      "position": {
+                        "x": 0.0,
+                        "y": 0.0,
+                        "z": 0.0
+                      },
+                      "orientation": {
+                        "x": 0.6088937099642462,
+                        "y": 0.0,
+                        "z": 0.0
+                      }
+                    }
+                  },
+                  "children": []
+                },
+                {
+                  "className": "Pose",
+                  "name": "Left Arm",
+                  "properties": {
+                    "Weight": 1.0,
+                    "CFrame": {
+                      "position": {
+                        "x": 0.0,
+                        "y": 0.0,
+                        "z": 0.0
+                      },
+                      "orientation": {
+                        "x": -0.9648492323601672,
+                        "y": -3.75661196089738,
+                        "z": -7.1565957384800125
+                      }
+                    }
+                  },
+                  "children": []
+                },
+                {
+                  "className": "Pose",
+                  "name": "Left Leg",
+                  "properties": {
+                    "Weight": 1.0,
+                    "CFrame": {
+                      "position": {
+                        "x": 0.001245,
+                        "y": 0.02526,
+                        "z": 7.7e-05
+                      },
+                      "orientation": {
+                        "x": -0.0,
+                        "y": 0.0,
+                        "z": 0.7514556875069034
+                      }
+                    }
+                  },
+                  "children": []
+                },
+                {
+                  "className": "Pose",
+                  "name": "Right Leg",
+                  "properties": {
+                    "Weight": 1.0,
+                    "CFrame": {
+                      "position": {
+                        "x": -0.003499,
+                        "y": 0.018173,
+                        "z": 1e-05
+                      },
+                      "orientation": {
+                        "x": 0.3658360379673956,
+                        "y": -0.14570635016018735,
+                        "z": -5.293342729967553
+                      }
+                    }
+                  },
+                  "children": []
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "className": "Keyframe",
+      "name": "Keyframe",
+      "properties": {
+        "Time": 0.104167
+      },
+      "children": [
+        {
+          "className": "Pose",
+          "name": "HumanoidRootPart",
+          "properties": {
+            "Weight": 1.0,
+            "CFrame": {
+              "position": {
+                "x": 0.0,
+                "y": -0.0,
+                "z": 0.0
+              },
+              "orientation": {
+                "x": 0.0,
+                "y": 0.0,
+                "z": -0.0
+              }
+            }
+          },
+          "children": [
+            {
+              "className": "Pose",
+              "name": "Torso",
+              "properties": {
+                "Weight": 1.0,
+                "CFrame": {
+                  "position": {
+                    "x": 0.0,
+                    "y": -0.0,
+                    "z": 0.0
+                  },
+                  "orientation": {
+                    "x": 0.0,
+                    "y": 0.0,
+                    "z": -0.0
+                  }
+                }
+              },
+              "children": [
+                {
+                  "className": "Pose",
+                  "name": "Right Arm",
+                  "properties": {
+                    "Weight": 1.0,
+                    "CFrame": {
+                      "position": {
+                        "x": 0.0,
+                        "y": 0.0,
+                        "z": 0.0
+                      },
+                      "orientation": {
+                        "x": -2.1001887039696117,
+                        "y": 0.8617097870605122,
+                        "z": 43.40537900915511
+                      }
+                    }
+                  },
+                  "children": []
+                },
+                {
+                  "className": "Pose",
+                  "name": "Head",
+                  "properties": {
+                    "Weight": 1.0,
+                    "CFrame": {
+                      "position": {
+                        "x": 0.0,
+                        "y": 0.0,
+                        "z": 0.0
+                      },
+                      "orientation": {
+                        "x": 1.0298897995473217,
+                        "y": -0.0,
+                        "z": 0.0
+                      }
+                    }
+                  },
+                  "children": []
+                },
+                {
+                  "className": "Pose",
+                  "name": "Left Arm",
+                  "properties": {
+                    "Weight": 1.0,
+                    "CFrame": {
+                      "position": {
+                        "x": 0.0,
+                        "y": 0.0,
+                        "z": 0.0
+                      },
+                      "orientation": {
+                        "x": -0.950981715622008,
+                        "y": -3.7573440447723123,
+                        "z": -15.522153997895586
+                      }
+                    }
+                  },
+                  "children": []
+                },
+                {
+                  "className": "Pose",
+                  "name": "Left Leg",
+                  "properties": {
+                    "Weight": 1.0,
+                    "CFrame": {
+                      "position": {
+                        "x": 0.002514,
+                        "y": 0.050999,
+                        "z": 5.1e-05
+                      },
+                      "orientation": {
+                        "x": -0.0,
+                        "y": 0.0,
+                        "z": 1.695687091349584
+                      }
+                    }
+                  },
+                  "children": []
+                },
+                {
+                  "className": "Pose",
+                  "name": "Right Leg",
+                  "properties": {
+                    "Weight": 1.0,
+                    "CFrame": {
+                      "position": {
+                        "x": -0.006791,
+                        "y": 0.03527,
+                        "z": 2e-05
+                      },
+                      "orientation": {
+                        "x": 0.7134081844965593,
+                        "y": -0.21693922446559777,
+                        "z": -7.8821918822675
+                      }
+                    }
+                  },
+                  "children": []
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "className": "Keyframe",
+      "name": "Keyframe",
+      "properties": {
+        "Time": 0.138889
+      },
+      "children": [
+        {
+          "className": "Pose",
+          "name": "HumanoidRootPart",
+          "properties": {
+            "Weight": 1.0,
+            "CFrame": {
+              "position": {
+                "x": 0.0,
+                "y": -0.0,
+                "z": 0.0
+              },
+              "orientation": {
+                "x": 0.0,
+                "y": 0.0,
+                "z": -0.0
+              }
+            }
+          },
+          "children": [
+            {
+              "className": "Pose",
+              "name": "Torso",
+              "properties": {
+                "Weight": 1.0,
+                "CFrame": {
+                  "position": {
+                    "x": 0.0,
+                    "y": -0.0,
+                    "z": 0.0
+                  },
+                  "orientation": {
+                    "x": 0.0,
+                    "y": 0.0,
+                    "z": -0.0
+                  }
+                }
+              },
+              "children": [
+                {
+                  "className": "Pose",
+                  "name": "Right Arm",
+                  "properties": {
+                    "Weight": 1.0,
+                    "CFrame": {
+                      "position": {
+                        "x": 0.0,
+                        "y": 0.0,
+                        "z": 0.0
+                      },
+                      "orientation": {
+                        "x": -2.1001887039696117,
+                        "y": 0.8617097870605122,
+                        "z": 57.60540941498974
+                      }
+                    }
+                  },
+                  "children": []
+                },
+                {
+                  "className": "Pose",
+                  "name": "Head",
+                  "properties": {
+                    "Weight": 1.0,
+                    "CFrame": {
+                      "position": {
+                        "x": 0.0,
+                        "y": 0.0,
+                        "z": 0.0
+                      },
+                      "orientation": {
+                        "x": 1.2094318309323593,
+                        "y": 0.0,
+                        "z": 0.0
+                      }
+                    }
+                  },
+                  "children": []
+                },
+                {
+                  "className": "Pose",
+                  "name": "Left Arm",
+                  "properties": {
+                    "Weight": 1.0,
+                    "CFrame": {
+                      "position": {
+                        "x": 0.0,
+                        "y": 0.0,
+                        "z": 0.0
+                      },
+                      "orientation": {
+                        "x": -0.9328164989330815,
+                        "y": -3.758358267942917,
+                        "z": -26.10950374044837
+                      }
+                    }
+                  },
+                  "children": []
+                },
+                {
+                  "className": "Pose",
+                  "name": "Left Leg",
+                  "properties": {
+                    "Weight": 1.0,
+                    "CFrame": {
+                      "position": {
+                        "x": 0.003976,
+                        "y": 0.080647,
+                        "z": 2.2e-05
+                      },
+                      "orientation": {
+                        "x": -0.0,
+                        "y": 0.0,
+                        "z": 3.0232972896548547
+                      }
+                    }
+                  },
+                  "children": []
+                },
+                {
+                  "className": "Pose",
+                  "name": "Right Leg",
+                  "properties": {
+                    "Weight": 1.0,
+                    "CFrame": {
+                      "position": {
+                        "x": -0.010216,
+                        "y": 0.053057,
+                        "z": 3e-05
+                      },
+                      "orientation": {
+                        "x": 1.0731554001635464,
+                        "y": -0.2801119199238204,
+                        "z": -10.17835709924404
+                      }
+                    }
+                  },
+                  "children": []
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "className": "Keyframe",
+      "name": "Keyframe",
+      "properties": {
+        "Time": 0.173611
+      },
+      "children": [
+        {
+          "className": "Pose",
+          "name": "HumanoidRootPart",
+          "properties": {
+            "Weight": 1.0,
+            "CFrame": {
+              "position": {
+                "x": 0.0,
+                "y": -0.0,
+                "z": 0.0
+              },
+              "orientation": {
+                "x": 0.0,
+                "y": 0.0,
+                "z": -0.0
+              }
+            }
+          },
+          "children": [
+            {
+              "className": "Pose",
+              "name": "Torso",
+              "properties": {
+                "Weight": 1.0,
+                "CFrame": {
+                  "position": {
+                    "x": 0.0,
+                    "y": -0.0,
+                    "z": 0.0
+                  },
+                  "orientation": {
+                    "x": 0.0,
+                    "y": 0.0,
+                    "z": -0.0
+                  }
+                }
+              },
+              "children": [
+                {
+                  "className": "Pose",
+                  "name": "Right Arm",
+                  "properties": {
+                    "Weight": 1.0,
+                    "CFrame": {
+                      "position": {
+                        "x": 0.0,
+                        "y": 0.0,
+                        "z": 0.0
+                      },
+                      "orientation": {
+                        "x": -2.1001887039696117,
+                        "y": 0.8617097870605122,
+                        "z": 71.13489647159152
+                      }
+                    }
+                  },
+                  "children": []
+                },
+                {
+                  "className": "Pose",
+                  "name": "Head",
+                  "properties": {
+                    "Weight": 1.0,
+                    "CFrame": {
+                      "position": {
+                        "x": 0.0,
+                        "y": 0.0,
+                        "z": 0.0
+                      },
+                      "orientation": {
+                        "x": 0.6016740388788068,
+                        "y": 0.0,
+                        "z": 0.0
+                      }
+                    }
+                  },
+                  "children": []
+                },
+                {
+                  "className": "Pose",
+                  "name": "Left Arm",
+                  "properties": {
+                    "Weight": 1.0,
+                    "CFrame": {
+                      "position": {
+                        "x": 0.0,
+                        "y": 0.0,
+                        "z": 0.0
+                      },
+                      "orientation": {
+                        "x": -0.9112131928066584,
+                        "y": -3.7595402626095376,
+                        "z": -38.277780539662345
+                      }
+                    }
+                  },
+                  "children": []
+                },
+                {
+                  "className": "Pose",
+                  "name": "Left Leg",
+                  "properties": {
+                    "Weight": 1.0,
+                    "CFrame": {
+                      "position": {
+                        "x": 0.00545,
+                        "y": 0.110562,
+                        "z": -7e-06
+                      },
+                      "orientation": {
+                        "x": -0.0,
+                        "y": 0.0,
+                        "z": 4.737509912108789
+                      }
+                    }
+                  },
+                  "children": []
+                },
+                {
+                  "className": "Pose",
+                  "name": "Right Leg",
+                  "properties": {
+                    "Weight": 1.0,
+                    "CFrame": {
+                      "position": {
+                        "x": -0.013098,
+                        "y": 0.068026,
+                        "z": 3.8e-05
+                      },
+                      "orientation": {
+                        "x": 1.3719066416375019,
+                        "y": -0.33115166670000423,
+                        "z": -12.030931498148068
+                      }
+                    }
+                  },
+                  "children": []
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "className": "Keyframe",
+      "name": "Keyframe",
+      "properties": {
+        "Time": 0.208333
+      },
+      "children": [
+        {
+          "className": "Pose",
+          "name": "HumanoidRootPart",
+          "properties": {
+            "Weight": 1.0,
+            "CFrame": {
+              "position": {
+                "x": 0.0,
+                "y": -0.0,
+                "z": 0.0
+              },
+              "orientation": {
+                "x": 0.0,
+                "y": 0.0,
+                "z": -0.0
+              }
+            }
+          },
+          "children": [
+            {
+              "className": "Pose",
+              "name": "Torso",
+              "properties": {
+                "Weight": 1.0,
+                "CFrame": {
+                  "position": {
+                    "x": 0.0,
+                    "y": -0.0,
+                    "z": 0.0
+                  },
+                  "orientation": {
+                    "x": 0.0,
+                    "y": 0.0,
+                    "z": -0.0
+                  }
+                }
+              },
+              "children": [
+                {
+                  "className": "Pose",
+                  "name": "Right Arm",
+                  "properties": {
+                    "Weight": 1.0,
+                    "CFrame": {
+                      "position": {
+                        "x": 0.0,
+                        "y": 0.0,
+                        "z": 0.0
+                      },
+                      "orientation": {
+                        "x": -2.1001887039696117,
+                        "y": 0.8617097870605122,
+                        "z": 83.85783298197315
+                      }
+                    }
+                  },
+                  "children": []
+                },
+                {
+                  "className": "Pose",
+                  "name": "Head",
+                  "properties": {
+                    "Weight": 1.0,
+                    "CFrame": {
+                      "position": {
+                        "x": 0.0,
+                        "y": 0.0,
+                        "z": 0.0
+                      },
+                      "orientation": {
+                        "x": -0.9354524551167049,
+                        "y": 0.0,
+                        "z": 0.0
+                      }
+                    }
+                  },
+                  "children": []
+                },
+                {
+                  "className": "Pose",
+                  "name": "Left Arm",
+                  "properties": {
+                    "Weight": 1.0,
+                    "CFrame": {
+                      "position": {
+                        "x": 0.0,
+                        "y": 0.0,
+                        "z": 0.0
+                      },
+                      "orientation": {
+                        "x": -0.8869740935940947,
+                        "y": -3.7608366007292924,
+                        "z": -51.30835059828846
+                      }
+                    }
+                  },
+                  "children": []
+                },
+                {
+                  "className": "Pose",
+                  "name": "Left Leg",
+                  "properties": {
+                    "Weight": 1.0,
+                    "CFrame": {
+                      "position": {
+                        "x": 0.006712,
+                        "y": 0.136164,
+                        "z": -3.2e-05
+                      },
+                      "orientation": {
+                        "x": -0.0,
+                        "y": 0.0,
+                        "z": 6.532281387339694
+                      }
+                    }
+                  },
+                  "children": []
+                },
+                {
+                  "className": "Pose",
+                  "name": "Right Leg",
+                  "properties": {
+                    "Weight": 1.0,
+                    "CFrame": {
+                      "position": {
+                        "x": -0.014646,
+                        "y": 0.076066,
+                        "z": 4.3e-05
+                      },
+                      "orientation": {
+                        "x": 1.5365131924754458,
+                        "y": -0.3619552153808953,
+                        "z": -13.150975805116385
+                      }
+                    }
+                  },
+                  "children": []
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "className": "Keyframe",
+      "name": "Keyframe",
+      "properties": {
+        "Time": 0.243056
+      },
+      "children": [
+        {
+          "className": "Pose",
+          "name": "HumanoidRootPart",
+          "properties": {
+            "Weight": 1.0,
+            "CFrame": {
+              "position": {
+                "x": 0.0,
+                "y": -0.0,
+                "z": 0.0
+              },
+              "orientation": {
+                "x": 0.0,
+                "y": 0.0,
+                "z": -0.0
+              }
+            }
+          },
+          "children": [
+            {
+              "className": "Pose",
+              "name": "Torso",
+              "properties": {
+                "Weight": 1.0,
+                "CFrame": {
+                  "position": {
+                    "x": 0.0,
+                    "y": -0.0,
+                    "z": 0.0
+                  },
+                  "orientation": {
+                    "x": 0.0,
+                    "y": 0.0,
+                    "z": -0.0
+                  }
+                }
+              },
+              "children": [
+                {
+                  "className": "Pose",
+                  "name": "Right Arm",
+                  "properties": {
+                    "Weight": 1.0,
+                    "CFrame": {
+                      "position": {
+                        "x": 0.0,
+                        "y": 0.0,
+                        "z": 0.0
+                      },
+                      "orientation": {
+                        "x": -2.1001887039696117,
+                        "y": 0.8617097870605122,
+                        "z": 95.60637458824222
+                      }
+                    }
+                  },
+                  "children": []
+                },
+                {
+                  "className": "Pose",
+                  "name": "Head",
+                  "properties": {
+                    "Weight": 1.0,
+                    "CFrame": {
+                      "position": {
+                        "x": 0.0,
+                        "y": 0.0,
+                        "z": 0.0
+                      },
+                      "orientation": {
+                        "x": -2.578033974570641,
+                        "y": 0.0,
+                        "z": 0.0
+                      }
+                    }
+                  },
+                  "children": []
+                },
+                {
+                  "className": "Pose",
+                  "name": "Left Arm",
+                  "properties": {
+                    "Weight": 1.0,
+                    "CFrame": {
+                      "position": {
+                        "x": 0.0,
+                        "y": 0.0,
+                        "z": 0.0
+                      },
+                      "orientation": {
+                        "x": -0.8608441785165841,
+                        "y": -3.76224727956157,
+                        "z": -64.53120788464355
+                      }
+                    }
+                  },
+                  "children": []
+                },
+                {
+                  "className": "Pose",
+                  "name": "Left Leg",
+                  "properties": {
+                    "Weight": 1.0,
+                    "CFrame": {
+                      "position": {
+                        "x": 0.007775,
+                        "y": 0.157723,
+                        "z": -5.3e-05
+                      },
+                      "orientation": {
+                        "x": -0.0,
+                        "y": 0.0,
+                        "z": 11.513046224871823
+                      }
+                    }
+                  },
+                  "children": []
+                },
+                {
+                  "className": "Pose",
+                  "name": "Right Leg",
+                  "properties": {
+                    "Weight": 1.0,
+                    "CFrame": {
+                      "position": {
+                        "x": -0.014654,
+                        "y": 0.076108,
+                        "z": 4.3e-05
+                      },
+                      "orientation": {
+                        "x": 1.536111977795792,
+                        "y": -0.36155400885516653,
+                        "z": -13.135961017718788
+                      }
+                    }
+                  },
+                  "children": []
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "className": "Keyframe",
+      "name": "Keyframe",
+      "properties": {
+        "Time": 0.277778
+      },
+      "children": [
+        {
+          "className": "Pose",
+          "name": "HumanoidRootPart",
+          "properties": {
+            "Weight": 1.0,
+            "CFrame": {
+              "position": {
+                "x": 0.0,
+                "y": -0.0,
+                "z": 0.0
+              },
+              "orientation": {
+                "x": 0.0,
+                "y": 0.0,
+                "z": -0.0
+              }
+            }
+          },
+          "children": [
+            {
+              "className": "Pose",
+              "name": "Torso",
+              "properties": {
+                "Weight": 1.0,
+                "CFrame": {
+                  "position": {
+                    "x": 0.0,
+                    "y": -0.0,
+                    "z": 0.0
+                  },
+                  "orientation": {
+                    "x": 0.0,
+                    "y": 0.0,
+                    "z": -0.0
+                  }
+                }
+              },
+              "children": [
+                {
+                  "className": "Pose",
+                  "name": "Right Arm",
+                  "properties": {
+                    "Weight": 1.0,
+                    "CFrame": {
+                      "position": {
+                        "x": 0.0,
+                        "y": 0.0,
+                        "z": 0.0
+                      },
+                      "orientation": {
+                        "x": -2.1001887039696117,
+                        "y": 0.8617097870605122,
+                        "z": 106.15393892585989
+                      }
+                    }
+                  },
+                  "children": []
+                },
+                {
+                  "className": "Pose",
+                  "name": "Head",
+                  "properties": {
+                    "Weight": 1.0,
+                    "CFrame": {
+                      "position": {
+                        "x": 0.0,
+                        "y": 0.0,
+                        "z": 0.0
+                      },
+                      "orientation": {
+                        "x": -3.5165011947737117,
+                        "y": 0.0,
+                        "z": 0.0
+                      }
+                    }
+                  },
+                  "children": []
+                },
+                {
+                  "className": "Pose",
+                  "name": "Left Arm",
+                  "properties": {
+                    "Weight": 1.0,
+                    "CFrame": {
+                      "position": {
+                        "x": 0.0,
+                        "y": 0.0,
+                        "z": 0.0
+                      },
+                      "orientation": {
+                        "x": -0.833683009142823,
+                        "y": -3.763711356579287,
+                        "z": -77.30991851707536
+                      }
+                    }
+                  },
+                  "children": []
+                },
+                {
+                  "className": "Pose",
+                  "name": "Left Leg",
+                  "properties": {
+                    "Weight": 1.0,
+                    "CFrame": {
+                      "position": {
+                        "x": 0.008539,
+                        "y": 0.173223,
+                        "z": -6.8e-05
+                      },
+                      "orientation": {
+                        "x": -0.0,
+                        "y": 0.0,
+                        "z": 17.86757621862776
+                      }
+                    }
+                  },
+                  "children": []
+                },
+                {
+                  "className": "Pose",
+                  "name": "Right Leg",
+                  "properties": {
+                    "Weight": 1.0,
+                    "CFrame": {
+                      "position": {
+                        "x": -0.014078,
+                        "y": 0.07312,
+                        "z": 4.1e-05
+                      },
+                      "orientation": {
+                        "x": 1.4758159884166704,
+                        "y": -0.3480748145580276,
+                        "z": -12.64635247243128
+                      }
+                    }
+                  },
+                  "children": []
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "className": "Keyframe",
+      "name": "Keyframe",
+      "properties": {
+        "Time": 0.3125
+      },
+      "children": [
+        {
+          "className": "Pose",
+          "name": "HumanoidRootPart",
+          "properties": {
+            "Weight": 1.0,
+            "CFrame": {
+              "position": {
+                "x": 0.0,
+                "y": -0.0,
+                "z": 0.0
+              },
+              "orientation": {
+                "x": 0.0,
+                "y": 0.0,
+                "z": -0.0
+              }
+            }
+          },
+          "children": [
+            {
+              "className": "Pose",
+              "name": "Torso",
+              "properties": {
+                "Weight": 1.0,
+                "CFrame": {
+                  "position": {
+                    "x": 0.0,
+                    "y": -0.0,
+                    "z": 0.0
+                  },
+                  "orientation": {
+                    "x": 0.0,
+                    "y": 0.0,
+                    "z": -0.0
+                  }
+                }
+              },
+              "children": [
+                {
+                  "className": "Pose",
+                  "name": "Right Arm",
+                  "properties": {
+                    "Weight": 1.0,
+                    "CFrame": {
+                      "position": {
+                        "x": 0.0,
+                        "y": 0.0,
+                        "z": 0.0
+                      },
+                      "orientation": {
+                        "x": -2.1001887039696117,
+                        "y": 0.8617097870605122,
+                        "z": 115.17172761193711
+                      }
+                    }
+                  },
+                  "children": []
+                },
+                {
+                  "className": "Pose",
+                  "name": "Head",
+                  "properties": {
+                    "Weight": 1.0,
+                    "CFrame": {
+                      "position": {
+                        "x": 0.0,
+                        "y": 0.0,
+                        "z": 0.0
+                      },
+                      "orientation": {
+                        "x": -3.6326939289573508,
+                        "y": 0.0,
+                        "z": 0.0
+                      }
+                    }
+                  },
+                  "children": []
+                },
+                {
+                  "className": "Pose",
+                  "name": "Left Arm",
+                  "properties": {
+                    "Weight": 1.0,
+                    "CFrame": {
+                      "position": {
+                        "x": 0.0,
+                        "y": 0.0,
+                        "z": 0.0
+                      },
+                      "orientation": {
+                        "x": -0.8061782184062335,
+                        "y": -3.7652363516580722,
+                        "z": -89.00783298284125
+                      }
+                    }
+                  },
+                  "children": []
+                },
+                {
+                  "className": "Pose",
+                  "name": "Left Leg",
+                  "properties": {
+                    "Weight": 1.0,
+                    "CFrame": {
+                      "position": {
+                        "x": 0.008833,
+                        "y": 0.17918,
+                        "z": -7.4e-05
+                      },
+                      "orientation": {
+                        "x": -0.0,
+                        "y": 0.0,
+                        "z": 21.561199568059894
+                      }
+                    }
+                  },
+                  "children": []
+                },
+                {
+                  "className": "Pose",
+                  "name": "Right Leg",
+                  "properties": {
+                    "Weight": 1.0,
+                    "CFrame": {
+                      "position": {
+                        "x": -0.013089,
+                        "y": 0.067983,
+                        "z": 3.8e-05
+                      },
+                      "orientation": {
+                        "x": 1.372135890480892,
+                        "y": -0.3253632290204331,
+                        "z": -11.821644889482666
+                      }
+                    }
+                  },
+                  "children": []
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "className": "Keyframe",
+      "name": "Keyframe",
+      "properties": {
+        "Time": 0.347222
+      },
+      "children": [
+        {
+          "className": "Pose",
+          "name": "HumanoidRootPart",
+          "properties": {
+            "Weight": 1.0,
+            "CFrame": {
+              "position": {
+                "x": 0.0,
+                "y": -0.0,
+                "z": 0.0
+              },
+              "orientation": {
+                "x": 0.0,
+                "y": 0.0,
+                "z": -0.0
+              }
+            }
+          },
+          "children": [
+            {
+              "className": "Pose",
+              "name": "Torso",
+              "properties": {
+                "Weight": 1.0,
+                "CFrame": {
+                  "position": {
+                    "x": 0.0,
+                    "y": -0.0,
+                    "z": 0.0
+                  },
+                  "orientation": {
+                    "x": 0.0,
+                    "y": 0.0,
+                    "z": -0.0
+                  }
+                }
+              },
+              "children": [
+                {
+                  "className": "Pose",
+                  "name": "Right Arm",
+                  "properties": {
+                    "Weight": 1.0,
+                    "CFrame": {
+                      "position": {
+                        "x": 0.0,
+                        "y": 0.0,
+                        "z": 0.0
+                      },
+                      "orientation": {
+                        "x": -2.1001887039696117,
+                        "y": 0.8617097870605122,
+                        "z": 122.14667128382563
+                      }
+                    }
+                  },
+                  "children": []
+                },
+                {
+                  "className": "Pose",
+                  "name": "Head",
+                  "properties": {
+                    "Weight": 1.0,
+                    "CFrame": {
+                      "position": {
+                        "x": 0.0,
+                        "y": 0.0,
+                        "z": 0.0
+                      },
+                      "orientation": {
+                        "x": -3.5684531434270363,
+                        "y": 0.0,
+                        "z": 0.0
+                      }
+                    }
+                  },
+                  "children": []
+                },
+                {
+                  "className": "Pose",
+                  "name": "Left Arm",
+                  "properties": {
+                    "Weight": 1.0,
+                    "CFrame": {
+                      "position": {
+                        "x": 0.0,
+                        "y": 0.0,
+                        "z": 0.0
+                      },
+                      "orientation": {
+                        "x": -0.7790747209794552,
+                        "y": -3.766704148843,
+                        "z": -98.97336837096157
+                      }
+                    }
+                  },
+                  "children": []
+                },
+                {
+                  "className": "Pose",
+                  "name": "Left Leg",
+                  "properties": {
+                    "Weight": 1.0,
+                    "CFrame": {
+                      "position": {
+                        "x": 0.008528,
+                        "y": 0.172994,
+                        "z": -6.8e-05
+                      },
+                      "orientation": {
+                        "x": -0.0,
+                        "y": 0.0,
+                        "z": 20.833834096418666
+                      }
+                    }
+                  },
+                  "children": []
+                },
+                {
+                  "className": "Pose",
+                  "name": "Right Leg",
+                  "properties": {
+                    "Weight": 1.0,
+                    "CFrame": {
+                      "position": {
+                        "x": -0.011776,
+                        "y": 0.061163,
+                        "z": 3.4e-05
+                      },
+                      "orientation": {
+                        "x": 1.2344757821326466,
+                        "y": -0.29565873926146985,
+                        "z": -10.743072437157306
+                      }
+                    }
+                  },
+                  "children": []
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "className": "Keyframe",
+      "name": "Keyframe",
+      "properties": {
+        "Time": 0.381944
+      },
+      "children": [
+        {
+          "className": "Pose",
+          "name": "HumanoidRootPart",
+          "properties": {
+            "Weight": 1.0,
+            "CFrame": {
+              "position": {
+                "x": 0.0,
+                "y": -0.0,
+                "z": 0.0
+              },
+              "orientation": {
+                "x": 0.0,
+                "y": 0.0,
+                "z": -0.0
+              }
+            }
+          },
+          "children": [
+            {
+              "className": "Pose",
+              "name": "Torso",
+              "properties": {
+                "Weight": 1.0,
+                "CFrame": {
+                  "position": {
+                    "x": 0.0,
+                    "y": -0.0,
+                    "z": 0.0
+                  },
+                  "orientation": {
+                    "x": 0.0,
+                    "y": 0.0,
+                    "z": -0.0
+                  }
+                }
+              },
+              "children": [
+                {
+                  "className": "Pose",
+                  "name": "Right Arm",
+                  "properties": {
+                    "Weight": 1.0,
+                    "CFrame": {
+                      "position": {
+                        "x": 0.0,
+                        "y": 0.0,
+                        "z": 0.0
+                      },
+                      "orientation": {
+                        "x": -2.1001887039696117,
+                        "y": 0.8617097870605122,
+                        "z": 126.18799340928241
+                      }
+                    }
+                  },
+                  "children": []
+                },
+                {
+                  "className": "Pose",
+                  "name": "Head",
+                  "properties": {
+                    "Weight": 1.0,
+                    "CFrame": {
+                      "position": {
+                        "x": 0.0,
+                        "y": 0.0,
+                        "z": 0.0
+                      },
+                      "orientation": {
+                        "x": -3.3890158301337516,
+                        "y": 0.0,
+                        "z": 0.0
+                      }
+                    }
+                  },
+                  "children": []
+                },
+                {
+                  "className": "Pose",
+                  "name": "Left Arm",
+                  "properties": {
+                    "Weight": 1.0,
+                    "CFrame": {
+                      "position": {
+                        "x": 0.0,
+                        "y": 0.0,
+                        "z": 0.0
+                      },
+                      "orientation": {
+                        "x": -0.7532893145285887,
+                        "y": -3.768118515294954,
+                        "z": -106.47993756644436
+                      }
+                    }
+                  },
+                  "children": []
+                },
+                {
+                  "className": "Pose",
+                  "name": "Left Leg",
+                  "properties": {
+                    "Weight": 1.0,
+                    "CFrame": {
+                      "position": {
+                        "x": 0.007825,
+                        "y": 0.158731,
+                        "z": -5.4e-05
+                      },
+                      "orientation": {
+                        "x": -0.0,
+                        "y": 0.0,
+                        "z": 19.192741644790548
+                      }
+                    }
+                  },
+                  "children": []
+                },
+                {
+                  "className": "Pose",
+                  "name": "Right Leg",
+                  "properties": {
+                    "Weight": 1.0,
+                    "CFrame": {
+                      "position": {
+                        "x": -0.010235,
+                        "y": 0.053157,
+                        "z": 3e-05
+                      },
+                      "orientation": {
+                        "x": 1.0728688710212975,
+                        "y": -0.26091441097610674,
+                        "z": -9.4799206814712
+                      }
+                    }
+                  },
+                  "children": []
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "className": "Keyframe",
+      "name": "Keyframe",
+      "properties": {
+        "Time": 0.416667
+      },
+      "children": [
+        {
+          "className": "Pose",
+          "name": "HumanoidRootPart",
+          "properties": {
+            "Weight": 1.0,
+            "CFrame": {
+              "position": {
+                "x": 0.0,
+                "y": -0.0,
+                "z": 0.0
+              },
+              "orientation": {
+                "x": 0.0,
+                "y": 0.0,
+                "z": -0.0
+              }
+            }
+          },
+          "children": [
+            {
+              "className": "Pose",
+              "name": "Torso",
+              "properties": {
+                "Weight": 1.0,
+                "CFrame": {
+                  "position": {
+                    "x": 0.0,
+                    "y": -0.0,
+                    "z": 0.0
+                  },
+                  "orientation": {
+                    "x": 0.0,
+                    "y": 0.0,
+                    "z": -0.0
+                  }
+                }
+              },
+              "children": [
+                {
+                  "className": "Pose",
+                  "name": "Right Arm",
+                  "properties": {
+                    "Weight": 1.0,
+                    "CFrame": {
+                      "position": {
+                        "x": 0.0,
+                        "y": 0.0,
+                        "z": 0.0
+                      },
+                      "orientation": {
+                        "x": -2.1001887039696117,
+                        "y": 0.8617097870605122,
+                        "z": 124.09185821569001
+                      }
+                    }
+                  },
+                  "children": []
+                },
+                {
+                  "className": "Pose",
+                  "name": "Head",
+                  "properties": {
+                    "Weight": 1.0,
+                    "CFrame": {
+                      "position": {
+                        "x": 0.0,
+                        "y": 0.0,
+                        "z": 0.0
+                      },
+                      "orientation": {
+                        "x": -3.1196347862651312,
+                        "y": 0.0,
+                        "z": 0.0
+                      }
+                    }
+                  },
+                  "children": []
+                },
+                {
+                  "className": "Pose",
+                  "name": "Left Arm",
+                  "properties": {
+                    "Weight": 1.0,
+                    "CFrame": {
+                      "position": {
+                        "x": 0.0,
+                        "y": 0.0,
+                        "z": 0.0
+                      },
+                      "orientation": {
+                        "x": -0.7297387767497189,
+                        "y": -3.7694185129113493,
+                        "z": -110.84817524501476
+                      }
+                    }
+                  },
+                  "children": []
+                },
+                {
+                  "className": "Pose",
+                  "name": "Left Leg",
+                  "properties": {
+                    "Weight": 1.0,
+                    "CFrame": {
+                      "position": {
+                        "x": 0.006826,
+                        "y": 0.138466,
+                        "z": -3.4e-05
+                      },
+                      "orientation": {
+                        "x": -0.0,
+                        "y": 0.0,
+                        "z": 16.88040692345183
+                      }
+                    }
+                  },
+                  "children": []
+                },
+                {
+                  "className": "Pose",
+                  "name": "Right Leg",
+                  "properties": {
+                    "Weight": 1.0,
+                    "CFrame": {
+                      "position": {
+                        "x": -0.008551,
+                        "y": 0.04441,
+                        "z": 2.5e-05
+                      },
+                      "orientation": {
+                        "x": 0.8963717394550939,
+                        "y": -0.2225646217256938,
+                        "z": -8.08737893434956
+                      }
+                    }
+                  },
+                  "children": []
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "className": "Keyframe",
+      "name": "Keyframe",
+      "properties": {
+        "Time": 0.451389
+      },
+      "children": [
+        {
+          "className": "Pose",
+          "name": "HumanoidRootPart",
+          "properties": {
+            "Weight": 1.0,
+            "CFrame": {
+              "position": {
+                "x": 0.0,
+                "y": -0.0,
+                "z": 0.0
+              },
+              "orientation": {
+                "x": 0.0,
+                "y": 0.0,
+                "z": -0.0
+              }
+            }
+          },
+          "children": [
+            {
+              "className": "Pose",
+              "name": "Torso",
+              "properties": {
+                "Weight": 1.0,
+                "CFrame": {
+                  "position": {
+                    "x": 0.0,
+                    "y": -0.0,
+                    "z": 0.0
+                  },
+                  "orientation": {
+                    "x": 0.0,
+                    "y": 0.0,
+                    "z": -0.0
+                  }
+                }
+              },
+              "children": [
+                {
+                  "className": "Pose",
+                  "name": "Right Arm",
+                  "properties": {
+                    "Weight": 1.0,
+                    "CFrame": {
+                      "position": {
+                        "x": 0.0,
+                        "y": 0.0,
+                        "z": 0.0
+                      },
+                      "orientation": {
+                        "x": -2.1001887039696117,
+                        "y": 0.8617097870605122,
+                        "z": 110.56187661611419
+                      }
+                    }
+                  },
+                  "children": []
+                },
+                {
+                  "className": "Pose",
+                  "name": "Head",
+                  "properties": {
+                    "Weight": 1.0,
+                    "CFrame": {
+                      "position": {
+                        "x": 0.0,
+                        "y": 0.0,
+                        "z": 0.0
+                      },
+                      "orientation": {
+                        "x": -2.7884830448613447,
+                        "y": 0.0,
+                        "z": 0.0
+                      }
+                    }
+                  },
+                  "children": []
+                },
+                {
+                  "className": "Pose",
+                  "name": "Left Arm",
+                  "properties": {
+                    "Weight": 1.0,
+                    "CFrame": {
+                      "position": {
+                        "x": 0.0,
+                        "y": 0.0,
+                        "z": 0.0
+                      },
+                      "orientation": {
+                        "x": -0.707964666690731,
+                        "y": -3.7705507361321065,
+                        "z": -111.74535602017069
+                      }
+                    }
+                  },
+                  "children": []
+                },
+                {
+                  "className": "Pose",
+                  "name": "Left Leg",
+                  "properties": {
+                    "Weight": 1.0,
+                    "CFrame": {
+                      "position": {
+                        "x": 0.005629,
+                        "y": 0.114193,
+                        "z": -1e-05
+                      },
+                      "orientation": {
+                        "x": -0.0,
+                        "y": 0.0,
+                        "z": 14.108267831323388
+                      }
+                    }
+                  },
+                  "children": []
+                },
+                {
+                  "className": "Pose",
+                  "name": "Right Leg",
+                  "properties": {
+                    "Weight": 1.0,
+                    "CFrame": {
+                      "position": {
+                        "x": -0.006808,
+                        "y": 0.03536,
+                        "z": 2e-05
+                      },
+                      "orientation": {
+                        "x": 0.7136946856116672,
+                        "y": -0.18215778848789205,
+                        "z": -6.6181014393175115
+                      }
+                    }
+                  },
+                  "children": []
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "className": "Keyframe",
+      "name": "Keyframe",
+      "properties": {
+        "Time": 0.486111
+      },
+      "children": [
+        {
+          "className": "Pose",
+          "name": "HumanoidRootPart",
+          "properties": {
+            "Weight": 1.0,
+            "CFrame": {
+              "position": {
+                "x": 0.0,
+                "y": -0.0,
+                "z": 0.0
+              },
+              "orientation": {
+                "x": 0.0,
+                "y": 0.0,
+                "z": -0.0
+              }
+            }
+          },
+          "children": [
+            {
+              "className": "Pose",
+              "name": "Torso",
+              "properties": {
+                "Weight": 1.0,
+                "CFrame": {
+                  "position": {
+                    "x": 0.0,
+                    "y": -0.0,
+                    "z": 0.0
+                  },
+                  "orientation": {
+                    "x": 0.0,
+                    "y": 0.0,
+                    "z": -0.0
+                  }
+                }
+              },
+              "children": [
+                {
+                  "className": "Pose",
+                  "name": "Right Arm",
+                  "properties": {
+                    "Weight": 1.0,
+                    "CFrame": {
+                      "position": {
+                        "x": 0.0,
+                        "y": 0.0,
+                        "z": 0.0
+                      },
+                      "orientation": {
+                        "x": -2.1001887039696117,
+                        "y": 0.8617097870605122,
+                        "z": 87.4795755654797
+                      }
+                    }
+                  },
+                  "children": []
+                },
+                {
+                  "className": "Pose",
+                  "name": "Head",
+                  "properties": {
+                    "Weight": 1.0,
+                    "CFrame": {
+                      "position": {
+                        "x": 0.0,
+                        "y": 0.0,
+                        "z": 0.0
+                      },
+                      "orientation": {
+                        "x": -2.424564201720157,
+                        "y": 0.0,
+                        "z": 0.0
+                      }
+                    }
+                  },
+                  "children": []
+                },
+                {
+                  "className": "Pose",
+                  "name": "Left Arm",
+                  "properties": {
+                    "Weight": 1.0,
+                    "CFrame": {
+                      "position": {
+                        "x": 0.0,
+                        "y": 0.0,
+                        "z": 0.0
+                      },
+                      "orientation": {
+                        "x": -0.6873939566981861,
+                        "y": -3.7716829495952773,
+                        "z": -109.738582497661
+                      }
+                    }
+                  },
+                  "children": []
+                },
+                {
+                  "className": "Pose",
+                  "name": "Left Leg",
+                  "properties": {
+                    "Weight": 1.0,
+                    "CFrame": {
+                      "position": {
+                        "x": 0.004333,
+                        "y": 0.087902,
+                        "z": 1.5e-05
+                      },
+                      "orientation": {
+                        "x": -0.0,
+                        "y": 0.0,
+                        "z": 11.073726710020965
+                      }
+                    }
+                  },
+                  "children": []
+                },
+                {
+                  "className": "Pose",
+                  "name": "Right Leg",
+                  "properties": {
+                    "Weight": 1.0,
+                    "CFrame": {
+                      "position": {
+                        "x": -0.005091,
+                        "y": 0.026441,
+                        "z": 1.5e-05
+                      },
+                      "orientation": {
+                        "x": 0.5336606064704542,
+                        "y": -0.14106841326947234,
+                        "z": -5.125227117815188
+                      }
+                    }
+                  },
+                  "children": []
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "className": "Keyframe",
+      "name": "Keyframe",
+      "properties": {
+        "Time": 0.520833
+      },
+      "children": [
+        {
+          "className": "Pose",
+          "name": "HumanoidRootPart",
+          "properties": {
+            "Weight": 1.0,
+            "CFrame": {
+              "position": {
+                "x": 0.0,
+                "y": -0.0,
+                "z": 0.0
+              },
+              "orientation": {
+                "x": 0.0,
+                "y": 0.0,
+                "z": -0.0
+              }
+            }
+          },
+          "children": [
+            {
+              "className": "Pose",
+              "name": "Torso",
+              "properties": {
+                "Weight": 1.0,
+                "CFrame": {
+                  "position": {
+                    "x": 0.0,
+                    "y": -0.0,
+                    "z": 0.0
+                  },
+                  "orientation": {
+                    "x": 0.0,
+                    "y": 0.0,
+                    "z": -0.0
+                  }
+                }
+              },
+              "children": [
+                {
+                  "className": "Pose",
+                  "name": "Right Arm",
+                  "properties": {
+                    "Weight": 1.0,
+                    "CFrame": {
+                      "position": {
+                        "x": 0.0,
+                        "y": 0.0,
+                        "z": 0.0
+                      },
+                      "orientation": {
+                        "x": -2.1001887039696117,
+                        "y": 0.8617097870605122,
+                        "z": 60.17200014371622
+                      }
+                    }
+                  },
+                  "children": []
+                },
+                {
+                  "className": "Pose",
+                  "name": "Head",
+                  "properties": {
+                    "Weight": 1.0,
+                    "CFrame": {
+                      "position": {
+                        "x": 0.0,
+                        "y": 0.0,
+                        "z": 0.0
+                      },
+                      "orientation": {
+                        "x": -2.058277894535182,
+                        "y": 0.0,
+                        "z": 0.0
+                      }
+                    }
+                  },
+                  "children": []
+                },
+                {
+                  "className": "Pose",
+                  "name": "Left Arm",
+                  "properties": {
+                    "Weight": 1.0,
+                    "CFrame": {
+                      "position": {
+                        "x": 0.0,
+                        "y": 0.0,
+                        "z": 0.0
+                      },
+                      "orientation": {
+                        "x": -0.6692872213148046,
+                        "y": -3.7727008022988744,
+                        "z": -101.09154441425233
+                      }
+                    }
+                  },
+                  "children": []
+                },
+                {
+                  "className": "Pose",
+                  "name": "Left Leg",
+                  "properties": {
+                    "Weight": 1.0,
+                    "CFrame": {
+                      "position": {
+                        "x": 0.003041,
+                        "y": 0.061687,
+                        "z": 4.1e-05
+                      },
+                      "orientation": {
+                        "x": -0.0,
+                        "y": 0.0,
+                        "z": 7.978181901599596
+                      }
+                    }
+                  },
+                  "children": []
+                },
+                {
+                  "className": "Pose",
+                  "name": "Right Leg",
+                  "properties": {
+                    "Weight": 1.0,
+                    "CFrame": {
+                      "position": {
+                        "x": -0.003487,
+                        "y": 0.018112,
+                        "z": 1e-05
+                      },
+                      "orientation": {
+                        "x": 0.3655495532346056,
+                        "y": -0.10095728008119613,
+                        "z": -3.667502157669954
+                      }
+                    }
+                  },
+                  "children": []
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "className": "Keyframe",
+      "name": "Keyframe",
+      "properties": {
+        "Time": 0.555556
+      },
+      "children": [
+        {
+          "className": "Pose",
+          "name": "HumanoidRootPart",
+          "properties": {
+            "Weight": 1.0,
+            "CFrame": {
+              "position": {
+                "x": 0.0,
+                "y": -0.0,
+                "z": 0.0
+              },
+              "orientation": {
+                "x": 0.0,
+                "y": 0.0,
+                "z": -0.0
+              }
+            }
+          },
+          "children": [
+            {
+              "className": "Pose",
+              "name": "Torso",
+              "properties": {
+                "Weight": 1.0,
+                "CFrame": {
+                  "position": {
+                    "x": 0.0,
+                    "y": -0.0,
+                    "z": 0.0
+                  },
+                  "orientation": {
+                    "x": 0.0,
+                    "y": 0.0,
+                    "z": -0.0
+                  }
+                }
+              },
+              "children": [
+                {
+                  "className": "Pose",
+                  "name": "Right Arm",
+                  "properties": {
+                    "Weight": 1.0,
+                    "CFrame": {
+                      "position": {
+                        "x": 0.0,
+                        "y": 0.0,
+                        "z": 0.0
+                      },
+                      "orientation": {
+                        "x": -2.1001887039696117,
+                        "y": 0.8617097870605122,
+                        "z": 35.02373441103521
+                      }
+                    }
+                  },
+                  "children": []
+                },
+                {
+                  "className": "Pose",
+                  "name": "Head",
+                  "properties": {
+                    "Weight": 1.0,
+                    "CFrame": {
+                      "position": {
+                        "x": 0.0,
+                        "y": 0.0,
+                        "z": 0.0
+                      },
+                      "orientation": {
+                        "x": -1.72234133206004,
+                        "y": 0.0,
+                        "z": 0.0
+                      }
+                    }
+                  },
+                  "children": []
+                },
+                {
+                  "className": "Pose",
+                  "name": "Left Arm",
+                  "properties": {
+                    "Weight": 1.0,
+                    "CFrame": {
+                      "position": {
+                        "x": 0.0,
+                        "y": 0.0,
+                        "z": 0.0
+                      },
+                      "orientation": {
+                        "x": -0.6535298320091449,
+                        "y": -3.773550891921515,
+                        "z": -77.34251674454455
+                      }
+                    }
+                  },
+                  "children": []
+                },
+                {
+                  "className": "Pose",
+                  "name": "Left Leg",
+                  "properties": {
+                    "Weight": 1.0,
+                    "CFrame": {
+                      "position": {
+                        "x": 0.001863,
+                        "y": 0.037793,
+                        "z": 6.4e-05
+                      },
+                      "orientation": {
+                        "x": -0.0,
+                        "y": 0.0,
+                        "z": 5.052182191497838
+                      }
+                    }
+                  },
+                  "children": []
+                },
+                {
+                  "className": "Pose",
+                  "name": "Right Leg",
+                  "properties": {
+                    "Weight": 1.0,
+                    "CFrame": {
+                      "position": {
+                        "x": -0.002092,
+                        "y": 0.010866,
+                        "z": 6e-06
+                      },
+                      "orientation": {
+                        "x": 0.21932877963708577,
+                        "y": -0.06382798259780831,
+                        "z": -2.319984088496431
+                      }
+                    }
+                  },
+                  "children": []
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "className": "Keyframe",
+      "name": "Keyframe",
+      "properties": {
+        "Time": 0.590278
+      },
+      "children": [
+        {
+          "className": "Pose",
+          "name": "HumanoidRootPart",
+          "properties": {
+            "Weight": 1.0,
+            "CFrame": {
+              "position": {
+                "x": 0.0,
+                "y": -0.0,
+                "z": 0.0
+              },
+              "orientation": {
+                "x": 0.0,
+                "y": 0.0,
+                "z": -0.0
+              }
+            }
+          },
+          "children": [
+            {
+              "className": "Pose",
+              "name": "Torso",
+              "properties": {
+                "Weight": 1.0,
+                "CFrame": {
+                  "position": {
+                    "x": 0.0,
+                    "y": -0.0,
+                    "z": 0.0
+                  },
+                  "orientation": {
+                    "x": 0.0,
+                    "y": 0.0,
+                    "z": -0.0
+                  }
+                }
+              },
+              "children": [
+                {
+                  "className": "Pose",
+                  "name": "Right Arm",
+                  "properties": {
+                    "Weight": 1.0,
+                    "CFrame": {
+                      "position": {
+                        "x": 0.0,
+                        "y": 0.0,
+                        "z": 0.0
+                      },
+                      "orientation": {
+                        "x": -2.1001887039696117,
+                        "y": 0.8617097870605122,
+                        "z": 15.514517200819682
+                      }
+                    }
+                  },
+                  "children": []
+                },
+                {
+                  "className": "Pose",
+                  "name": "Head",
+                  "properties": {
+                    "Weight": 1.0,
+                    "CFrame": {
+                      "position": {
+                        "x": 0.0,
+                        "y": 0.0,
+                        "z": 0.0
+                      },
+                      "orientation": {
+                        "x": -1.4458978670378209,
+                        "y": 0.0,
+                        "z": 0.0
+                      }
+                    }
+                  },
+                  "children": []
+                },
+                {
+                  "className": "Pose",
+                  "name": "Left Arm",
+                  "properties": {
+                    "Weight": 1.0,
+                    "CFrame": {
+                      "position": {
+                        "x": 0.0,
+                        "y": 0.0,
+                        "z": 0.0
+                      },
+                      "orientation": {
+                        "x": -0.6392622749126305,
+                        "y": -3.774286626347135,
+                        "z": -44.56683119596908
+                      }
+                    }
+                  },
+                  "children": []
+                },
+                {
+                  "className": "Pose",
+                  "name": "Left Leg",
+                  "properties": {
+                    "Weight": 1.0,
+                    "CFrame": {
+                      "position": {
+                        "x": 0.000898,
+                        "y": 0.018221,
+                        "z": 8.4e-05
+                      },
+                      "orientation": {
+                        "x": -0.0,
+                        "y": 0.0,
+                        "z": 2.5377156115356128
+                      }
+                    }
+                  },
+                  "children": []
+                },
+                {
+                  "className": "Pose",
+                  "name": "Right Leg",
+                  "properties": {
+                    "Weight": 1.0,
+                    "CFrame": {
+                      "position": {
+                        "x": -0.00099,
+                        "y": 0.005142,
+                        "z": 3e-06
+                      },
+                      "orientation": {
+                        "x": 0.10376271341703648,
+                        "y": -0.03220028909683459,
+                        "z": -1.1707502921063846
+                      }
+                    }
+                  },
+                  "children": []
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "className": "Keyframe",
+      "name": "End",
+      "properties": {
+        "Time": 0.625
+      },
+      "children": [
+        {
+          "className": "Pose",
+          "name": "HumanoidRootPart",
+          "properties": {
+            "Weight": 1.0,
+            "CFrame": {
+              "position": {
+                "x": 0.0,
+                "y": -0.0,
+                "z": 0.0
+              },
+              "orientation": {
+                "x": 0.0,
+                "y": 0.0,
+                "z": -0.0
+              }
+            }
+          },
+          "children": [
+            {
+              "className": "Pose",
+              "name": "Torso",
+              "properties": {
+                "Weight": 1.0,
+                "CFrame": {
+                  "position": {
+                    "x": 0.0,
+                    "y": -0.0,
+                    "z": 0.0
+                  },
+                  "orientation": {
+                    "x": 0.0,
+                    "y": 0.0,
+                    "z": -0.0
+                  }
+                }
+              },
+              "children": [
+                {
+                  "className": "Pose",
+                  "name": "Right Arm",
+                  "properties": {
+                    "Weight": 1.0,
+                    "CFrame": {
+                      "position": {
+                        "x": 0.0,
+                        "y": 0.0,
+                        "z": 0.0
+                      },
+                      "orientation": {
+                        "x": -2.1001887039696117,
+                        "y": 0.8617097870605122,
+                        "z": 3.532541147651562
+                      }
+                    }
+                  },
+                  "children": []
+                },
+                {
+                  "className": "Pose",
+                  "name": "Head",
+                  "properties": {
+                    "Weight": 1.0,
+                    "CFrame": {
+                      "position": {
+                        "x": 0.0,
+                        "y": 0.0,
+                        "z": 0.0
+                      },
+                      "orientation": {
+                        "x": -1.2582018481568715,
+                        "y": 0.0,
+                        "z": 0.0
+                      }
+                    }
+                  },
+                  "children": []
+                },
+                {
+                  "className": "Pose",
+                  "name": "Left Arm",
+                  "properties": {
+                    "Weight": 1.0,
+                    "CFrame": {
+                      "position": {
+                        "x": 0.0,
+                        "y": 0.0,
+                        "z": 0.0
+                      },
+                      "orientation": {
+                        "x": -0.6281462137705525,
+                        "y": -3.774911779250216,
+                        "z": -14.045749085832162
+                      }
+                    }
+                  },
+                  "children": []
+                },
+                {
+                  "className": "Pose",
+                  "name": "Left Leg",
+                  "properties": {
+                    "Weight": 1.0,
+                    "CFrame": {
+                      "position": {
+                        "x": 0.000246,
+                        "y": 0.004985,
+                        "z": 9.7e-05
+                      },
+                      "orientation": {
+                        "x": -0.0,
+                        "y": 0.0,
+                        "z": 0.7382765373791786
+                      }
+                    }
+                  },
+                  "children": []
+                },
+                {
+                  "className": "Pose",
+                  "name": "Right Leg",
+                  "properties": {
+                    "Weight": 1.0,
+                    "CFrame": {
+                      "position": {
+                        "x": -0.000266,
+                        "y": 0.00138,
+                        "z": 1e-06
+                      },
+                      "orientation": {
+                        "x": 0.027845749939533874,
+                        "y": -0.009511099311809048,
+                        "z": -0.34555287656663425
+                      }
+                    }
+                  },
+                  "children": []
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

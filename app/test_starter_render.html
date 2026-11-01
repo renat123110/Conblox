@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>StarterCharacter Verification</title>
+    <style>
+        body, html { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background: #1b1c20; font-family: sans-serif; }
+        #canvas { width: 1000px; height: 700px; display: block; }
+    </style>
+    <script src="/js/vendor/three.min.js"></script>
+</head>
+<body>
+<canvas id="canvas" width="1000" height="700"></canvas>
+<script type="module">
+import { DataModel } from '/js/engine/DataModel.js';
+import { Viewport } from '/js/studio/Viewport.js';
+import { parseRbxm } from '/js/studio/RbxmImporter.js';
+import { Vector3 } from '/js/engine/Math3D.js';
+
+async function run() {
+    const dataModel = new DataModel();
+    dataModel.createDefaultPlace();
+
+    const container = document.createElement('div');
+    container.style.width = '1000px';
+    container.style.height = '700px';
+    container.style.display = 'none';
+    document.body.appendChild(container);
+
+    const vp = new Viewport(container, dataModel);
+
+    const resp = await fetch('/StarterCharacter.rbxm');
+    const buf = await resp.arrayBuffer();
+    const { roots } = parseRbxm(buf);
+    const char = roots[0];
+
+    const torso = char.FindFirstChild('Torso');
+    if (torso) {
+        const offset = new Vector3(0, 3, 0).sub(torso.Position);
+        for (const desc of char.GetDescendants()) {
+            if (desc.IsA && desc.IsA('BasePart')) {
+                desc.Position = desc.Position.add(offset);
+            }
+        }
+    }
+
+    char.Parent = dataModel.Workspace;
+
+    for (const desc of char.GetDescendants()) {
+        if (desc.IsA && desc.IsA('BasePart')) {
+            vp.syncPartMesh(desc);
+        }
+    }
+
+    const frontLight = new THREE.DirectionalLight(0xffffff, 1.2);
+    frontLight.position.set(0, 4, -8);
+    vp.scene.add(frontLight);
+    vp.scene.add(new THREE.AmbientLight(0xffffff, 0.7));
+
+    await new Promise(r => setTimeout(r, 2000));
+
+    for (const desc of char.GetDescendants()) {
+        if (desc.IsA && desc.IsA('BasePart')) {
+            vp.rebuildPartMesh(desc);
+            const m = vp.partMeshes.get(desc);
+            if (m) vp.syncDecalOverlays(desc, m);
+        }
+    }
+
+    await new Promise(r => setTimeout(r, 500));
+
+    const mainCanvas = document.getElementById('canvas');
+    const renderer = new THREE.WebGLRenderer({ canvas: mainCanvas, antialias: true, preserveDrawingBuffer: true });
+    renderer.setSize(1000, 700);
+    renderer.setPixelRatio(1);
+    if (typeof THREE.SRGBColorSpace !== 'undefined') renderer.outputColorSpace = THREE.SRGBColorSpace;
+
+    const cam = new THREE.PerspectiveCamera(38, 1000 / 700, 0.1, 100);
+    cam.position.set(0, 3.4, -6.5);
+    cam.lookAt(0, 3.4, 0);
+
+    renderer.render(vp.scene, cam);
+
+    const dataUrl = mainCanvas.toDataURL('image/png');
+    await fetch('/api/test-save-screenshot', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ data: dataUrl, name: 'starter_character_face_verification.png' })
+    });
+
+    console.log('STARTER_CHARACTER_VERIFIED');
+}
+
+run().catch(err => console.error(err));
+</script>
+</body>
+</html>

@@ -4,6 +4,7 @@
  */
 
 import { Vector3, Color3, CFrame } from '../engine/Math3D.js';
+import { extractRobloxAssetId, fetchRobloxMeshData } from '../engine/RobloxMeshParser.js';
 
 export class PropertiesUI {
     constructor(containerEl, dataModel, onPropertyChange) {
@@ -276,6 +277,14 @@ export class PropertiesUI {
                 {
                     name: 'MaxHealth', type: 'number', value: inst.MaxHealth, min: 1, max: 10000, step: 1,
                     set: (v) => { inst.MaxHealth = Number(v); this.notifyChange(); }
+                },
+                {
+                    name: 'HipHeight', type: 'number', value: inst.HipHeight ?? 0, min: -20, max: 50, step: 0.1,
+                    set: (v) => { inst.HipHeight = Number(v); this.notifyChange(); }
+                },
+                {
+                    name: 'AutomaticScalingEnabled', type: 'bool', value: inst.AutomaticScalingEnabled !== false,
+                    set: (v) => { inst.AutomaticScalingEnabled = Boolean(v); this.notifyChange(); }
                 }
             ]);
         }
@@ -545,6 +554,206 @@ export class PropertiesUI {
                     }
                 }
             ]);
+        }
+
+        // SpecialMesh Category
+        if (inst.ClassName === 'SpecialMesh') {
+            this.renderSection('Mesh', [
+                {
+                    name: 'MeshType', type: 'select',
+                    options: ['FileMesh', 'Head', 'Brick', 'Sphere', 'Cylinder', 'Wedge', 'Torso'],
+                    value: inst.MeshType || 'FileMesh',
+                    set: (v) => {
+                        inst.MeshType = v;
+                        this.notifyChange();
+                        this.syncViewportMesh(inst);
+                    }
+                },
+                {
+                    name: 'MeshId', type: 'string', value: inst.MeshId || '',
+                    set: (v) => {
+                        inst.MeshId = v;
+                        this.notifyChange();
+                        this.handleMeshIdChange(inst, v);
+                    }
+                },
+                {
+                    name: 'TextureId', type: 'string', value: inst.TextureId || '',
+                    set: (v) => {
+                        inst.TextureId = v;
+                        this.notifyChange();
+                        this.handleTextureIdChange(inst, v);
+                    }
+                },
+                {
+                    name: 'Scale', type: 'vector3', value: inst.Scale || Vector3.one,
+                    set: (v) => {
+                        inst.Scale = v;
+                        this.notifyChange();
+                        this.syncViewportMesh(inst);
+                    }
+                },
+                {
+                    name: 'Offset', type: 'vector3', value: inst.Offset || Vector3.zero,
+                    set: (v) => {
+                        inst.Offset = v;
+                        this.notifyChange();
+                        this.syncViewportMesh(inst);
+                    }
+                },
+                {
+                    name: 'VertexColor', type: 'vector3', value: inst.VertexColor || Vector3.one,
+                    set: (v) => {
+                        inst.VertexColor = v;
+                        this.notifyChange();
+                        this.syncViewportMesh(inst);
+                    }
+                }
+            ]);
+        }
+
+        // CharacterMesh Category
+        if (inst.ClassName === 'CharacterMesh') {
+            const bodyPartOptions = ['Torso', 'LeftArm', 'RightArm', 'LeftLeg', 'RightLeg'];
+            let currentBodyPart = 'Torso';
+            if (typeof inst.BodyPart === 'string') {
+                currentBodyPart = inst.BodyPart;
+            } else {
+                const map = { 1: 'Torso', 2: 'LeftArm', 3: 'RightArm', 4: 'LeftLeg', 5: 'RightLeg' };
+                currentBodyPart = map[inst.BodyPart] || 'Torso';
+            }
+
+            this.renderSection('CharacterMesh', [
+                {
+                    name: 'BodyPart', type: 'select',
+                    options: bodyPartOptions,
+                    value: currentBodyPart,
+                    set: (v) => {
+                        inst.BodyPart = v;
+                        this.notifyChange();
+                        this.syncCharacterViewport(inst);
+                    }
+                },
+                {
+                    name: 'MeshId', type: 'string', value: inst.MeshId || '',
+                    set: (v) => {
+                        inst.MeshId = v;
+                        this.notifyChange();
+                        this.handleCharacterMeshIdChange(inst, v);
+                    }
+                },
+                {
+                    name: 'BaseTextureId', type: 'string', value: inst.BaseTextureId || '',
+                    set: (v) => {
+                        inst.BaseTextureId = v;
+                        this.notifyChange();
+                        this.syncCharacterViewport(inst);
+                    }
+                },
+                {
+                    name: 'OverlayTextureId', type: 'string', value: inst.OverlayTextureId || '',
+                    set: (v) => {
+                        inst.OverlayTextureId = v;
+                        this.notifyChange();
+                        this.syncCharacterViewport(inst);
+                    }
+                }
+            ]);
+        }
+
+        // Shirt Category
+        if (inst.ClassName === 'Shirt') {
+            this.renderSection('Shirt', [
+                {
+                    name: 'ShirtTemplate', type: 'string', value: inst.ShirtTemplate || '',
+                    set: (v) => {
+                        inst.ShirtTemplate = v;
+                        this.notifyChange();
+                        this.syncCharacterViewport(inst);
+                    }
+                },
+                {
+                    name: 'Color3', type: 'color3', value: inst.Color3 || Color3.fromRGB(255, 255, 255),
+                    set: (v) => {
+                        inst.Color3 = v;
+                        this.notifyChange();
+                        this.syncCharacterViewport(inst);
+                    }
+                }
+            ]);
+        }
+
+        // Pants Category
+        if (inst.ClassName === 'Pants') {
+            this.renderSection('Pants', [
+                {
+                    name: 'PantsTemplate', type: 'string', value: inst.PantsTemplate || '',
+                    set: (v) => {
+                        inst.PantsTemplate = v;
+                        this.notifyChange();
+                        this.syncCharacterViewport(inst);
+                    }
+                },
+                {
+                    name: 'Color3', type: 'color3', value: inst.Color3 || Color3.fromRGB(255, 255, 255),
+                    set: (v) => {
+                        inst.Color3 = v;
+                        this.notifyChange();
+                        this.syncCharacterViewport(inst);
+                    }
+                }
+            ]);
+        }
+
+        // If BasePart has a SpecialMesh child, also display SpecialMesh category on Part
+        if (inst.IsA && inst.IsA('BasePart')) {
+            const sm = inst.FindFirstChildOfClass && inst.FindFirstChildOfClass('SpecialMesh');
+            if (sm) {
+                this.renderSection('SpecialMesh', [
+                    {
+                        name: 'MeshType', type: 'select',
+                        options: ['FileMesh', 'Head', 'Brick', 'Sphere', 'Cylinder', 'Wedge', 'Torso'],
+                        value: sm.MeshType || 'FileMesh',
+                        set: (v) => {
+                            sm.MeshType = v;
+                            this.notifyChange();
+                            this.syncViewportMesh(sm);
+                        }
+                    },
+                    {
+                        name: 'MeshId', type: 'string', value: sm.MeshId || '',
+                        set: (v) => {
+                            sm.MeshId = v;
+                            this.notifyChange();
+                            this.handleMeshIdChange(sm, v);
+                        }
+                    },
+                    {
+                        name: 'TextureId', type: 'string', value: sm.TextureId || '',
+                        set: (v) => {
+                            sm.TextureId = v;
+                            this.notifyChange();
+                            this.handleTextureIdChange(sm, v);
+                        }
+                    },
+                    {
+                        name: 'Mesh Scale', type: 'vector3', value: sm.Scale || Vector3.one,
+                        set: (v) => {
+                            sm.Scale = v;
+                            this.notifyChange();
+                            this.syncViewportMesh(sm);
+                        }
+                    },
+                    {
+                        name: 'Mesh Offset', type: 'vector3', value: sm.Offset || Vector3.zero,
+                        set: (v) => {
+                            sm.Offset = v;
+                            this.notifyChange();
+                            this.syncViewportMesh(sm);
+                        }
+                    }
+                ]);
+            }
         }
 
         // 15. Joint & Constraint Category (Weld, WeldConstraint, WeldConstant, Motor6D)
@@ -1222,5 +1431,150 @@ export class PropertiesUI {
         if (!this.selectedInstance) return;
         if (document.activeElement && document.activeElement.tagName === 'INPUT') return;
         this.render();
+    }
+
+    async handleMeshIdChange(inst, value) {
+        const assetId = extractRobloxAssetId(value);
+        if (!assetId) {
+            inst.MeshData = null;
+            this.syncViewportMesh(inst);
+            return;
+        }
+
+        if (inst.MeshType !== 'FileMesh') {
+            inst.MeshType = 'FileMesh';
+        }
+
+        const studioApp = window.conbloxStudio;
+        if (studioApp?.outputUI) {
+            studioApp.outputUI.log('info', `[SpecialMesh] Downloading Roblox mesh ${assetId}...`);
+        }
+
+        try {
+            const data = await fetchRobloxMeshData(assetId);
+            if (!data || !data.geometry) {
+                throw new Error('No geometry data received from server');
+            }
+
+            inst.MeshData = data.geometry;
+            this.syncViewportMesh(inst);
+
+            if (studioApp?.outputUI) {
+                studioApp.outputUI.log('info', `[SpecialMesh] Successfully loaded mesh ${assetId} (${data.vertexCount} vertices, ${data.faceCount} faces).`);
+            }
+            if (studioApp?.historyManager) {
+                studioApp.historyManager.recordState();
+            }
+        } catch (error) {
+            console.error('[SpecialMesh] Error downloading mesh:', error);
+            if (studioApp?.outputUI) {
+                studioApp.outputUI.log('error', `[SpecialMesh] Error downloading mesh ${assetId}: ${error.message}`);
+            }
+
+            const isAuthError = Boolean(error.authRequired || (error.message && error.message.toLowerCase().includes('authentication required')));
+            if (isAuthError && studioApp?.robloxAuthUI) {
+                if (studioApp?.outputUI) {
+                    studioApp.outputUI.log('warn', `[SpecialMesh] Asset ${assetId} requires a Roblox account session. Opening authorization dialog...`);
+                }
+                studioApp.robloxAuthUI.show({
+                    message: `Roblox asset ${assetId} requires account authentication. Connect your Roblox account to download it.`,
+                    onLogin: () => {
+                        this.handleMeshIdChange(inst, value);
+                    }
+                });
+            }
+        }
+    }
+
+    async handleTextureIdChange(inst, value) {
+        const assetId = extractRobloxAssetId(value);
+        if (!assetId) {
+            this.syncViewportMesh(inst);
+            return;
+        }
+
+        try {
+            const resp = await fetch(`/api/roblox-asset?id=${encodeURIComponent(assetId)}`);
+            if (resp.ok) {
+                const blob = await resp.blob();
+                const reader = new FileReader();
+                reader.onload = () => {
+                    inst.TextureId = reader.result;
+                    this.syncViewportMesh(inst);
+                };
+                reader.readAsDataURL(blob);
+            }
+        } catch (err) {
+            console.warn('[SpecialMesh] Texture download failed:', err);
+            this.syncViewportMesh(inst);
+        }
+    }
+
+    syncViewportMesh(inst) {
+        const viewport = window.conbloxStudio?.viewport;
+        if (!viewport) return;
+        const part = (inst.IsA && inst.IsA('BasePart')) ? inst : inst.Parent;
+        if (part && part.IsA && part.IsA('BasePart')) {
+            if (viewport.rebuildPartMesh) {
+                viewport.rebuildPartMesh(part);
+            } else {
+                viewport.syncPartMesh(part);
+            }
+        }
+    }
+
+    async handleCharacterMeshIdChange(inst, value) {
+        const assetId = extractRobloxAssetId(value);
+        if (!assetId) {
+            inst.MeshData = null;
+            this.syncCharacterViewport(inst);
+            return;
+        }
+
+        const studioApp = window.conbloxStudio;
+        if (studioApp?.outputUI) {
+            studioApp.outputUI.log('info', `[CharacterMesh] Downloading Roblox mesh ${assetId}...`);
+        }
+
+        try {
+            const data = await fetchRobloxMeshData(assetId);
+            if (!data || !data.geometry) {
+                throw new Error('No geometry data received from server');
+            }
+
+            inst.MeshData = data.geometry;
+            this.syncCharacterViewport(inst);
+
+            if (studioApp?.outputUI) {
+                studioApp.outputUI.log('info', `[CharacterMesh] Successfully loaded mesh ${assetId} (${data.vertexCount} vertices, ${data.faceCount} faces).`);
+            }
+            if (studioApp?.historyManager) {
+                studioApp.historyManager.recordState();
+            }
+        } catch (error) {
+            console.error('[CharacterMesh] Error downloading mesh:', error);
+            if (studioApp?.outputUI) {
+                studioApp.outputUI.log('error', `[CharacterMesh] Error downloading mesh ${assetId}: ${error.message}`);
+            }
+
+            const isAuthError = Boolean(error.authRequired || (error.message && error.message.toLowerCase().includes('authentication required')));
+            if (isAuthError && studioApp?.robloxAuthUI) {
+                if (studioApp?.outputUI) {
+                    studioApp.outputUI.log('warn', `[CharacterMesh] Asset ${assetId} requires a Roblox account session. Opening authorization dialog...`);
+                }
+                studioApp.robloxAuthUI.show({
+                    message: `Roblox asset ${assetId} requires account authentication. Connect your Roblox account to download it.`,
+                    onLogin: () => {
+                        this.handleCharacterMeshIdChange(inst, value);
+                    }
+                });
+            }
+        }
+    }
+
+    syncCharacterViewport(inst) {
+        const viewport = window.conbloxStudio?.viewport;
+        if (!viewport) return;
+        viewport.handleCharacterChildChange?.(inst.Parent || inst);
     }
 }

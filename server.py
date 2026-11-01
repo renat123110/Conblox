@@ -45,7 +45,230 @@ BASE_DIR = getattr(sys, "_MEIPASS", os.path.dirname(os.path.abspath(__file__)))
 APP_DIR = os.path.join(BASE_DIR, "app")
 PLACES_DIR = os.path.join(BASE_DIR, "places")
 
+sys.path.insert(0, BASE_DIR)
+try:
+    from mesh_converter import parse_roblox_mesh, mesh_to_obj_string
+except ImportError:
+    pass
+
 os.makedirs(PLACES_DIR, exist_ok=True)
+
+ROBLOX_SESSION_PATH = os.path.join(APP_DIR, "content", "roblox_session.json")
+
+def load_roblox_session():
+    if os.path.isfile(ROBLOX_SESSION_PATH):
+        try:
+            with open(ROBLOX_SESSION_PATH, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except Exception as e:
+            print(f"[Server] Error reading roblox_session.json: {e}")
+    return None
+
+def save_roblox_session(session_data):
+    try:
+        os.makedirs(os.path.dirname(ROBLOX_SESSION_PATH), exist_ok=True)
+        with open(ROBLOX_SESSION_PATH, "w", encoding="utf-8") as f:
+            json.dump(session_data, f, indent=2)
+    except Exception as e:
+        print(f"[Server] Error saving roblox_session.json: {e}")
+
+def clear_roblox_session():
+    if os.path.isfile(ROBLOX_SESSION_PATH):
+        try:
+            os.remove(ROBLOX_SESSION_PATH)
+        except Exception:
+            pass
+
+class _DATA_BLOB(ctypes.Structure):
+    _fields_ = [('cbData', wintypes.DWORD), ('pbData', ctypes.POINTER(ctypes.c_char))]
+
+def _decrypt_dpapi(encrypted_bytes):
+    try:
+        blob_in = _DATA_BLOB(len(encrypted_bytes), ctypes.cast(ctypes.create_string_buffer(encrypted_bytes), ctypes.POINTER(ctypes.c_char)))
+        blob_out = _DATA_BLOB()
+        if ctypes.windll.crypt32.CryptUnprotectData(ctypes.byref(blob_in), None, None, None, None, 0, ctypes.byref(blob_out)):
+            data = ctypes.string_at(blob_out.pbData, blob_out.cbData)
+            ctypes.windll.kernel32.LocalFree(blob_out.pbData)
+            return data
+    except Exception as e:
+        print(f"[Server] DPAPI decrypt error: {e}")
+    return None
+
+def extract_local_roblox_cookie():
+    if sys.platform != "win32":
+        return None
+    try:
+        cookie_file = os.path.expandvars(r'%LOCALAPPDATA%\Roblox\LocalStorage\RobloxCookies.dat')
+        if os.path.isfile(cookie_file):
+            with open(cookie_file, 'r', encoding='utf-8', errors='ignore') as f:
+                doc = json.load(f)
+            raw = base64.b64decode(doc.get('CookiesData', ''))
+            dec = _decrypt_dpapi(raw)
+            if dec:
+                text = dec.decode('utf-8', errors='ignore')
+                for part in text.split(';'):
+                    if '.ROBLOSECURITY' in part:
+                        val = part.strip().split('\t')[-1].strip()
+                        if val.startswith('_|WARNING:-DO-NOT-SHARE-THIS.'):
+                            return val
+    except Exception as e:
+        print(f"[Server] Auto-detect cookie error: {e}")
+    return None
+
+def validate_roblox_cookie(cookie_str):
+    if not cookie_str:
+        return False, None, "No cookie provided"
+    clean_cookie = cookie_str.strip()
+    if clean_cookie.startswith(".ROBLOSECURITY="):
+        clean_cookie = clean_cookie[len(".ROBLOSECURITY="):].strip()
+
+    try:
+        proc = subprocess.run([
+            "curl.exe", "-4", "-s", "-m", "10",
+            "-H", f"Cookie: .ROBLOSECURITY={clean_cookie}",
+            "-H", "User-Agent: Roblox/WinInet",
+            "-H", "Accept: application/json",
+            "https://users.roblox.com/v1/users/authenticated"
+        ], capture_output=True, text=True, timeout=12)
+        if proc.returncode != 0 or not proc.stdout:
+            return False, None, "Failed to connect to Roblox authentication service"
+        
+        user_data = json.loads(proc.stdout)
+        user_id = user_data.get("id")
+        if not user_id:
+            msg = user_data.get("errors", [{}])[0].get("message", "Invalid or expired Roblox cookie")
+            return False, None, msg
+        
+        avatar_url = ""
+        try:
+            proc_thumb = subprocess.run([
+                "curl.exe", "-4", "-s", "-m", "10",
+                f"https://thumbnails.roblox.com/v1/users/avatar-headshot?userIds={user_id}&size=150x150&format=Png&isCircular=true"
+            ], capture_output=True, text=True, timeout=12)
+            if proc_thumb.returncode == 0 and proc_thumb.stdout:
+                thumb_json = json.loads(proc_thumb.stdout)
+                avatar_url = thumb_json.get("data", [{}])[0].get("imageUrl", "")
+        except Exception:
+            pass
+
+        return True, {
+            "userId": user_id,
+            "username": user_data.get("name", ""),
+            "displayName": user_data.get("displayName", ""),
+            "avatarUrl": avatar_url,
+            "cookie": clean_cookie
+        }, None
+    except Exception as err:
+        return False, None, str(err)
+
+def get_active_roblox_cookie():
+    session = load_roblox_session()
+    if session and session.get("cookie"):
+        return session["cookie"]
+    local_cookie = extract_local_roblox_cookie()
+    if local_cookie:
+        valid, user_dict, _ = validate_roblox_cookie(local_cookie)
+        if valid and user_dict:
+            save_roblox_session(user_dict)
+            return local_cookie
+    return None
+
+def fetch_roblox_image_bytes(asset_id, depth=0):
+    if depth > 3 or not asset_id:
+        return None, None, None
+    textures_dir = os.path.join(APP_DIR, "content", "textures", "roblox")
+    os.makedirs(textures_dir, exist_ok=True)
+
+    for ext, mime in [(".png", "image/png"), (".jpg", "image/jpeg"), (".jpeg", "image/jpeg"), (".webp", "image/webp")]:
+        fpath = os.path.join(textures_dir, f"{asset_id}{ext}")
+        if os.path.isfile(fpath) and os.path.getsize(fpath) > 0:
+            with open(fpath, "rb") as fp:
+                return fp.read(), mime, f"{asset_id}{ext}"
+
+    active_cookie = get_active_roblox_cookie()
+    payload = None
+
+    # 1. Try AssetDelivery v2 with authentication
+    v2_url = f"https://assetdelivery.roblox.com/v2/assetId/{asset_id}"
+    cmd = ["curl.exe", "-4", "-s", "-m", "15", "-L", "-H", "User-Agent: Roblox/WinInet", "-H", "Accept: application/json"]
+    if active_cookie:
+        cmd.extend(["-H", f"Cookie: .ROBLOSECURITY={active_cookie}"])
+    cmd.append(v2_url)
+
+    try:
+        res = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=20)
+        if res.returncode == 0 and res.stdout:
+            v2_data = json.loads(res.stdout.decode("utf-8", errors="ignore"))
+            locations = v2_data.get("locations") or []
+            if locations and "location" in locations[0]:
+                loc_url = locations[0]["location"]
+                dl_cmd = ["curl.exe", "-4", "-s", "-m", "30", "-L", loc_url]
+                dl_res = subprocess.run(dl_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=35)
+                if dl_res.returncode == 0 and dl_res.stdout:
+                    payload = dl_res.stdout
+    except Exception as e:
+        print(f"[Server] v2 asset delivery error for {asset_id}: {e}")
+
+    # 2. Fallback to v1 if v2 did not get payload
+    if not payload:
+        v1_url = f"https://assetdelivery.roblox.com/v1/asset/?id={asset_id}"
+        v1_cmd = ["curl.exe", "-4", "-s", "-m", "20", "-L", "-H", "User-Agent: Roblox/WinInet"]
+        if active_cookie:
+            v1_cmd.extend(["-H", f"Cookie: .ROBLOSECURITY={active_cookie}"])
+        v1_cmd.append(v1_url)
+        try:
+            v1_res = subprocess.run(v1_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=25)
+            if v1_res.returncode == 0 and v1_res.stdout:
+                payload = v1_res.stdout
+        except Exception as e:
+            print(f"[Server] v1 asset delivery error for {asset_id}: {e}")
+
+    if not payload:
+        return None, None, None
+
+    # Decompress if gzip
+    if payload.startswith(b"\x1f\x8b"):
+        try:
+            payload = gzip.decompress(payload)
+        except Exception:
+            pass
+
+    # Check for Decal XML wrapper
+    if payload.startswith(b"<roblox") or payload.startswith(b"<?xml") or b"Decal" in payload[:300]:
+        text = payload.decode("utf-8", errors="ignore")
+        match = re.search(r"(?:id=|rbxassetid://)(\d+)", text)
+        if match and match.group(1) != asset_id:
+            nested_id = match.group(1)
+            return fetch_roblox_image_bytes(nested_id, depth + 1)
+
+    if len(payload) > MAX_ROBLOX_IMAGE_BYTES:
+        return None, None, None
+
+    mime = "image/png"
+    ext = ".png"
+    if payload.startswith(b"\x89PNG\r\n\x1a\n"):
+        mime = "image/png"
+        ext = ".png"
+    elif payload.startswith(b"\xff\xd8\xff"):
+        mime = "image/jpeg"
+        ext = ".jpg"
+    elif payload.startswith(b"RIFF") and payload[8:12] == b"WEBP":
+        mime = "image/webp"
+        ext = ".webp"
+    elif payload.startswith(b"BM"):
+        mime = "image/bmp"
+        ext = ".bmp"
+    else:
+        return None, None, None
+
+    save_path = os.path.join(textures_dir, f"{asset_id}{ext}")
+    try:
+        with open(save_path, "wb") as fp:
+            fp.write(payload)
+    except Exception as e:
+        print(f"[Server] Save texture cache error for {asset_id}: {e}")
+
+    return payload, mime, f"{asset_id}{ext}"
 
 def _resolve_place_path(relative_path):
     places_root = os.path.realpath(PLACES_DIR)
@@ -283,49 +506,324 @@ class ConbloxRequestHandler(http.server.SimpleHTTPRequestHandler):
     def do_GET(self):
         parsed = urllib.parse.urlparse(self.path)
 
-        if parsed.path == "/api/roblox-asset":
-            asset_id = urllib.parse.parse_qs(parsed.query).get("id", [""])[0]
-            if not re.fullmatch(r"\d{1,20}", asset_id):
-                self.send_json_response({"error": "Invalid Roblox asset ID"}, status=400)
+        if parsed.path == "/api/roblox-animation":
+            raw_id = urllib.parse.parse_qs(parsed.query).get("id", [""])[0].strip()
+            match = re.search(r"\d{1,20}", raw_id)
+            if not match:
+                self.send_json_response({"error": "Invalid Roblox animation ID"}, status=400)
+                return
+            asset_id = match.group(0)
+            anim_dir = os.path.join(APP_DIR, "content", "animations")
+            os.makedirs(anim_dir, exist_ok=True)
+            anim_path = os.path.join(anim_dir, f"{asset_id}.rbxm")
+            anim_json_path = os.path.join(anim_dir, f"{asset_id}.json")
+
+            if os.path.isfile(anim_path):
+                with open(anim_path, "rb") as f:
+                    data = f.read()
+                self.send_response(200)
+                self.send_header("Content-Type", "application/octet-stream")
+                self.send_header("Content-Length", str(len(data)))
+                self.end_headers()
+                self.wfile.write(data)
                 return
 
-            asset_url = f"https://assetdelivery.roblox.com/v1/asset/?id={asset_id}"
-            request = urllib.request.Request(
-                asset_url,
-                headers={"User-Agent": "ConbloxStudio/1.0", "Accept-Encoding": "identity"}
-            )
+            if os.path.isfile(anim_json_path):
+                with open(anim_json_path, "rb") as f:
+                    data = f.read()
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(data)))
+                self.end_headers()
+                self.wfile.write(data)
+                return
+
             try:
-                for attempt in range(3):
-                    try:
-                        with urllib.request.urlopen(request, timeout=60) as response:
-                            payload = response.read(MAX_ROBLOX_IMAGE_BYTES + 1)
-                            is_gzip = response.headers.get("Content-Encoding", "").lower() == "gzip"
-                        break
-                    except (urllib.error.URLError, TimeoutError, OSError):
-                        if attempt == 2:
-                            raise
-                        time.sleep(0.5 * (attempt + 1))
-                if len(payload) > MAX_ROBLOX_IMAGE_BYTES:
-                    self.send_json_response({"error": "Roblox asset is too large"}, status=413)
+                delivery_url = f"https://assetdelivery.roblox.com/v2/assetId/{asset_id}"
+                session = load_roblox_session()
+                active_cookie = session.get("cookie") if session else None
+                if not active_cookie:
+                    active_cookie = extract_local_roblox_cookie()
+
+                headers = {"User-Agent": "Roblox/WinInet"}
+                if active_cookie:
+                    headers["Cookie"] = f".ROBLOSECURITY={active_cookie}"
+
+                req = urllib.request.Request(delivery_url, headers=headers)
+                with urllib.request.urlopen(req, timeout=15) as resp:
+                    delivery_data = json.loads(resp.read().decode("utf-8"))
+
+                locations = delivery_data.get("locations") or []
+                if not locations or not locations[0].get("location"):
+                    self.send_json_response({"error": f"No download location for animation {asset_id}"}, status=404)
                     return
-                if is_gzip or payload.startswith(b"\x1f\x8b"):
-                    with gzip.GzipFile(fileobj=io.BytesIO(payload)) as compressed:
-                        payload = compressed.read(MAX_ROBLOX_IMAGE_BYTES + 1)
-                if len(payload) > MAX_ROBLOX_IMAGE_BYTES:
-                    self.send_json_response({"error": "Roblox image is too large"}, status=413)
-                    return
-                if not payload.startswith(b"\x89PNG\r\n\x1a\n"):
-                    self.send_json_response({"error": "Roblox asset is not a PNG image"}, status=415)
+
+                download_url = locations[0]["location"]
+                payload = None
+                try:
+                    dl_cmd = ["curl.exe", "-4", "-s", "-m", "20", "-L", "-H", "User-Agent: Roblox/WinInet"]
+                    if active_cookie:
+                        dl_cmd.extend(["-H", f"Cookie: .ROBLOSECURITY={active_cookie}"])
+                    dl_cmd.append(download_url)
+                    proc = subprocess.run(dl_cmd, capture_output=True, timeout=25)
+                    if proc.returncode == 0 and len(proc.stdout) > 0:
+                        payload = proc.stdout
+                except Exception:
+                    pass
+
+                if not payload:
+                    req_dl = urllib.request.Request(download_url, headers=headers)
+                    with urllib.request.urlopen(req_dl, timeout=20) as resp_dl:
+                        payload = resp_dl.read()
+
+                if payload.startswith(b"\x1f\x8b"):
+                    payload = gzip.decompress(payload)
+
+                with open(anim_path, "wb") as f:
+                    f.write(payload)
+
+                self.send_response(200)
+                self.send_header("Content-Type", "application/octet-stream")
+                self.send_header("Content-Length", str(len(payload)))
+                self.end_headers()
+                self.wfile.write(payload)
+                return
+            except Exception as err:
+                self.send_json_response({"error": f"Failed to download animation {asset_id}: {err}"}, status=502)
+                return
+
+        if parsed.path == "/api/roblox-asset":
+            raw_id = urllib.parse.parse_qs(parsed.query).get("id", [""])[0].strip()
+            match = re.search(r"\d{1,20}", raw_id)
+            if not match:
+                self.send_json_response({"error": "Invalid Roblox asset ID"}, status=400)
+                return
+            asset_id = match.group(0)
+
+            try:
+                payload, mime, filename = fetch_roblox_image_bytes(asset_id)
+                if not payload:
+                    self.send_json_response({"error": f"Failed to retrieve Roblox asset {asset_id}"}, status=404)
                     return
 
                 self.send_response(200)
-                self.send_header("Content-Type", "image/png")
-                self.send_header("Content-Disposition", f'inline; filename="{asset_id}.png"')
+                self.send_header("Content-Type", mime)
+                self.send_header("Content-Disposition", f'inline; filename="{filename}"')
                 self.send_header("Content-Length", str(len(payload)))
                 self.end_headers()
                 self.wfile.write(payload)
             except Exception as error:
                 self.send_json_response({"error": f"Failed to download Roblox asset: {error}"}, status=502)
+            return
+
+        if parsed.path == "/api/roblox-account":
+            session = load_roblox_session()
+            has_autodetect = extract_local_roblox_cookie() is not None
+            if session and session.get("userId"):
+                self.send_json_response({
+                    "authenticated": True,
+                    "user": {
+                        "userId": session.get("userId"),
+                        "username": session.get("username"),
+                        "displayName": session.get("displayName"),
+                        "avatarUrl": session.get("avatarUrl")
+                    },
+                    "hasAutoDetect": has_autodetect
+                })
+            else:
+                # Check if autodetect cookie is present and auto-login
+                local_cookie = extract_local_roblox_cookie()
+                if local_cookie:
+                    valid, user_dict, _ = validate_roblox_cookie(local_cookie)
+                    if valid and user_dict:
+                        save_roblox_session(user_dict)
+                        self.send_json_response({
+                            "authenticated": True,
+                            "user": {
+                                "userId": user_dict.get("userId"),
+                                "username": user_dict.get("username"),
+                                "displayName": user_dict.get("displayName"),
+                                "avatarUrl": user_dict.get("avatarUrl")
+                            },
+                            "hasAutoDetect": True,
+                            "autoDetected": True
+                        })
+                        return
+                self.send_json_response({
+                    "authenticated": False,
+                    "hasAutoDetect": has_autodetect
+                })
+            return
+
+        if parsed.path == "/api/roblox-mesh":
+            raw_id = urllib.parse.parse_qs(parsed.query).get("id", [""])[0].strip()
+            match = re.search(r"\d{1,20}", raw_id)
+            if not match:
+                self.send_json_response({"error": "Invalid Roblox mesh ID"}, status=400)
+                return
+            asset_id = match.group(0)
+
+            meshes_dir = os.path.join(APP_DIR, "content", "meshes")
+            os.makedirs(meshes_dir, exist_ok=True)
+            mesh_path = os.path.join(meshes_dir, f"{asset_id}.mesh")
+            obj_path = os.path.join(meshes_dir, f"{asset_id}.obj")
+
+            force = urllib.parse.parse_qs(parsed.query).get("force", ["0"])[0] == "1"
+            if not force and os.path.isfile(mesh_path) and os.path.getsize(mesh_path) > 0:
+                try:
+                    with open(mesh_path, "rb") as mf:
+                        raw_mesh = mf.read()
+                    parsed_geom = parse_roblox_mesh(raw_mesh)
+                    if not os.path.isfile(obj_path) or os.path.getsize(obj_path) == 0:
+                        with open(obj_path, "w", encoding="utf-8") as of:
+                            of.write(mesh_to_obj_string(parsed_geom))
+                    self.send_json_response({
+                        "success": True,
+                        "id": asset_id,
+                        "meshPath": f"/content/meshes/{asset_id}.mesh",
+                        "objPath": f"/content/meshes/{asset_id}.obj",
+                        "geometry": parsed_geom,
+                        "vertexCount": parsed_geom["vertexCount"],
+                        "faceCount": parsed_geom["faceCount"]
+                    })
+                    return
+                except Exception as cache_err:
+                    print(f"[Server] Cache read error for {asset_id}, re-downloading: {cache_err}")
+
+            active_cookie = get_active_roblox_cookie()
+            delivery_url = f"https://assetdelivery.roblox.com/v2/assetId/{asset_id}"
+            delivery_data = None
+
+            curl_cmd = [
+                "curl.exe", "-4", "-s", "-m", "15", "-L",
+                "-H", "User-Agent: Roblox/WinInet",
+                "-H", "Accept: application/json"
+            ]
+            if active_cookie:
+                curl_cmd.extend(["-H", f"Cookie: .ROBLOSECURITY={active_cookie}"])
+                curl_cmd.extend(["-H", "Roblox-Browser-Asset-Request: 1"])
+            curl_cmd.append(delivery_url)
+
+            try:
+                proc = subprocess.run(curl_cmd, capture_output=True, text=True, timeout=18)
+                if proc.returncode == 0 and proc.stdout:
+                    delivery_data = json.loads(proc.stdout)
+            except Exception as e:
+                print(f"[Server] Delivery request exception: {e}")
+
+            if not delivery_data:
+                try:
+                    headers = {"User-Agent": "Roblox/WinInet", "Accept": "application/json"}
+                    if active_cookie:
+                        headers["Cookie"] = f".ROBLOSECURITY={active_cookie}"
+                        headers["Roblox-Browser-Asset-Request"] = "1"
+                    req = urllib.request.Request(delivery_url, headers=headers)
+                    with urllib.request.urlopen(req, timeout=15) as resp:
+                        delivery_data = json.loads(resp.read().decode("utf-8", errors="ignore"))
+                except urllib.error.HTTPError as http_err:
+                    try:
+                        delivery_data = json.loads(http_err.read().decode("utf-8", errors="ignore"))
+                    except Exception:
+                        pass
+                except Exception as err:
+                    self.send_json_response({"error": f"Failed to contact Roblox asset delivery: {err}"}, status=502)
+                    return
+
+            if "errors" in delivery_data and delivery_data["errors"]:
+                err_obj = delivery_data["errors"][0]
+                err_code = err_obj.get("code")
+                custom_err = err_obj.get("customErrorCode")
+                err_msg = err_obj.get("message", "Roblox API error")
+                is_auth_error = (err_code == 401 or custom_err == 11 or "Authentication required" in err_msg)
+                self.send_json_response({
+                    "error": f"Roblox API error: {err_msg}",
+                    "authRequired": is_auth_error,
+                    "assetId": asset_id
+                }, status=401 if is_auth_error else 400)
+                return
+
+            asset_type_id = delivery_data.get("assetTypeId")
+            if asset_type_id != 4:
+                self.send_json_response({
+                    "error": f"Roblox asset {asset_id} is not a mesh (assetTypeId is {asset_type_id}, expected 4)"
+                }, status=400)
+                return
+
+            locations = delivery_data.get("locations") or []
+            if not locations or not isinstance(locations, list) or not locations[0].get("location"):
+                self.send_json_response({"error": f"No download location provided for mesh {asset_id}"}, status=404)
+                return
+
+            download_url = locations[0]["location"]
+
+            urls_to_try = []
+            if "encoding=zstd" in download_url:
+                url_no_zstd = re.sub(r'([?&])encoding=zstd(&|$)', r'\1', download_url).rstrip('?&').replace('?&', '?')
+                urls_to_try.append(url_no_zstd)
+            urls_to_try.append(download_url)
+
+            mesh_payload = None
+            for u in urls_to_try:
+                try:
+                    dl_cmd = ["curl.exe", "-4", "-s", "-m", "20", "-L", "-H", "User-Agent: Roblox/WinInet"]
+                    if active_cookie:
+                        dl_cmd.extend(["-H", f"Cookie: .ROBLOSECURITY={active_cookie}"])
+                    dl_cmd.append(u)
+                    proc = subprocess.run(dl_cmd, capture_output=True, timeout=25)
+                    if proc.returncode == 0 and len(proc.stdout) > 0 and not proc.stdout.startswith(b"<?xml") and not proc.stdout.startswith(b"<Error>"):
+                        mesh_payload = proc.stdout
+                        break
+                except Exception:
+                    pass
+                if not mesh_payload:
+                    try:
+                        headers = {"User-Agent": "Roblox/WinInet", "Accept-Encoding": "gzip, identity"}
+                        if active_cookie:
+                            headers["Cookie"] = f".ROBLOSECURITY={active_cookie}"
+                        req = urllib.request.Request(u, headers=headers)
+                        with urllib.request.urlopen(req, timeout=20) as resp:
+                            mesh_payload = resp.read()
+                            if resp.headers.get("Content-Encoding") == "gzip":
+                                mesh_payload = gzip.decompress(mesh_payload)
+                            break
+                    except Exception:
+                        pass
+
+            if not mesh_payload:
+                self.send_json_response({"error": f"Failed to download mesh data from CDN for asset {asset_id}"}, status=502)
+                return
+
+            try:
+                if mesh_payload.startswith(b"\x1f\x8b"):
+                    mesh_payload = gzip.decompress(mesh_payload)
+                elif mesh_payload.startswith(b"(\xb5/\xfd"):
+                    try:
+                        import zstandard
+                        mesh_payload = zstandard.ZstdDecompressor().decompress(mesh_payload)
+                    except Exception:
+                        pass
+
+                with open(mesh_path, "wb") as mf:
+                    mf.write(mesh_payload)
+
+                parsed_geom = parse_roblox_mesh(mesh_payload)
+                obj_text = mesh_to_obj_string(parsed_geom)
+                with open(obj_path, "w", encoding="utf-8") as of:
+                    of.write(obj_text)
+
+                self.send_json_response({
+                    "success": True,
+                    "id": asset_id,
+                    "meshPath": f"/content/meshes/{asset_id}.mesh",
+                    "objPath": f"/content/meshes/{asset_id}.obj",
+                    "geometry": parsed_geom,
+                    "vertexCount": parsed_geom["vertexCount"],
+                    "faceCount": parsed_geom["faceCount"]
+                })
+            except Exception as parse_err:
+                self.send_json_response({
+                    "error": f"Failed to parse or convert mesh {asset_id}: {parse_err}"
+                }, status=500)
             return
 
         if parsed.path == "/api/native/status":
@@ -335,6 +833,28 @@ class ConbloxRequestHandler(http.server.SimpleHTTPRequestHandler):
                 "canCapture": user32 is not None,
                 "isLocked": NATIVE_MOUSE.is_locked
             })
+            return
+
+        if parsed.path in ["/content/head.obj", "/api/head-obj"]:
+            candidates = [
+                os.path.join(APP_DIR, "content", "head.obj"),
+                os.path.join(BASE_DIR, "content", "head.obj"),
+                os.path.join(BASE_DIR, "head.obj"),
+            ]
+            head_path = next((c for c in candidates if os.path.isfile(c)), None)
+            if head_path:
+                try:
+                    with open(head_path, "rb") as f:
+                        payload = f.read()
+                    self.send_response(200)
+                    self.send_header("Content-Type", "text/plain; charset=utf-8")
+                    self.send_header("Content-Length", str(len(payload)))
+                    self.end_headers()
+                    self.wfile.write(payload)
+                    return
+                except OSError:
+                    pass
+            self.send_json_response({"error": "head.obj is missing"}, status=404)
             return
 
         if parsed.path == "/api/starter-character":
@@ -369,17 +889,33 @@ class ConbloxRequestHandler(http.server.SimpleHTTPRequestHandler):
             return
 
         if parsed.path == "/api/places":
-            files = [f for f in os.listdir(PLACES_DIR) if f.endswith(".cblx") or f.endswith(".json")]
-            self.send_json_response(files)
+            place_exts = (".cblx", ".json", ".rbxl")
+            places_files = [f for f in os.listdir(PLACES_DIR) if f.lower().endswith(place_exts)]
+            base_files = [f for f in os.listdir(BASE_DIR) if f.lower().endswith(".rbxl")]
+            all_files = sorted(list(set(places_files + base_files)))
+            self.send_json_response(all_files)
             return
 
         if parsed.path.startswith("/places/"):
             rel_path = parsed.path[len("/places/"):]
-            file_path = _resolve_place_path(urllib.parse.unquote(rel_path))
+            filename = urllib.parse.unquote(rel_path)
+            file_path = _resolve_place_path(filename)
+            if not file_path or not os.path.isfile(file_path):
+                alt_path = os.path.join(BASE_DIR, os.path.basename(filename))
+                if os.path.isfile(alt_path):
+                    file_path = alt_path
+
             if file_path and os.path.isfile(file_path):
                 with open(file_path, "rb") as f:
                     content = f.read()
-                self.send_json_response(content)
+                if file_path.lower().endswith(".rbxl"):
+                    self.send_response(200)
+                    self.send_header("Content-Type", "application/octet-stream")
+                    self.send_header("Content-Length", str(len(content)))
+                    self.end_headers()
+                    self.wfile.write(content)
+                else:
+                    self.send_json_response(content)
                 return
             else:
                 self.send_json_response({"error": "File not found"}, status=404)
@@ -392,11 +928,22 @@ class ConbloxRequestHandler(http.server.SimpleHTTPRequestHandler):
                 self.send_json_response({"error": "Missing name"}, status=400)
                 return
 
-            file_path = os.path.join(PLACES_DIR, os.path.basename(name))
-            if os.path.exists(file_path):
+            basename = os.path.basename(name)
+            file_path = os.path.join(PLACES_DIR, basename)
+            if not os.path.exists(file_path):
+                file_path = os.path.join(BASE_DIR, basename)
+
+            if os.path.exists(file_path) and os.path.isfile(file_path):
                 with open(file_path, "rb") as f:
                     content = f.read()
-                self.send_json_response(content)
+                if file_path.lower().endswith(".rbxl"):
+                    self.send_response(200)
+                    self.send_header("Content-Type", "application/octet-stream")
+                    self.send_header("Content-Length", str(len(content)))
+                    self.end_headers()
+                    self.wfile.write(content)
+                else:
+                    self.send_json_response(content)
             else:
                 self.send_json_response({"error": "File not found"}, status=404)
             return
@@ -414,6 +961,133 @@ class ConbloxRequestHandler(http.server.SimpleHTTPRequestHandler):
 
     def do_POST(self):
         parsed = urllib.parse.urlparse(self.path)
+
+        if parsed.path == "/api/publish-animation":
+            length = int(self.headers.get("Content-Length", 0))
+            body = self.rfile.read(length).decode("utf-8") if length > 0 else "{}"
+            try:
+                data = json.loads(body)
+            except Exception:
+                data = {}
+
+            name = data.get("name") or "New Animation"
+            description = data.get("description") or ""
+            rbxm_b64 = data.get("rbxmBase64") or ""
+            serialized_data = data.get("serialized")
+
+            anim_dir = os.path.join(APP_DIR, "content", "animations")
+            os.makedirs(anim_dir, exist_ok=True)
+
+            manifest_path = os.path.join(anim_dir, "manifest.json")
+            manifest = {}
+            if os.path.isfile(manifest_path):
+                try:
+                    with open(manifest_path, "r", encoding="utf-8") as mf:
+                        manifest = json.load(mf)
+                except Exception:
+                    manifest = {}
+
+            import time
+            anim_id = int(time.time() * 1000) % 9000000000 + 1000000000
+
+            anim_path = os.path.join(anim_dir, f"{anim_id}.rbxm")
+            anim_json_path = os.path.join(anim_dir, f"{anim_id}.json")
+
+            if rbxm_b64:
+                import base64
+                with open(anim_path, "wb") as f:
+                    f.write(base64.b64decode(rbxm_b64))
+
+            if serialized_data:
+                with open(anim_json_path, "w", encoding="utf-8") as jf:
+                    json.dump(serialized_data, jf, indent=2)
+
+            manifest[str(anim_id)] = {
+                "id": anim_id,
+                "name": name,
+                "description": description,
+                "created": time.time()
+            }
+            with open(manifest_path, "w", encoding="utf-8") as mf:
+                json.dump(manifest, mf, indent=2)
+
+            self.send_json_response({
+                "success": True,
+                "id": anim_id,
+                "name": name,
+                "description": description,
+                "url": f"/content/animations/{anim_id}.rbxm"
+            })
+            return
+
+        if parsed.path == "/api/test-save-screenshot":
+            length = int(self.headers.get("Content-Length", 0))
+            body = self.rfile.read(length).decode("utf-8") if length > 0 else "{}"
+            try:
+                data = json.loads(body)
+                data_url = data.get("data", "")
+                filename = data.get("name", "screenshot.png")
+                if "," in data_url:
+                    data_url = data_url.split(",", 1)[1]
+                import base64
+                img_bytes = base64.b64decode(data_url)
+                scratch_dir = os.path.join(BASE_DIR, "scratch")
+                os.makedirs(scratch_dir, exist_ok=True)
+                with open(os.path.join(scratch_dir, filename), "wb") as f:
+                    f.write(img_bytes)
+                art_dir = r"C:\Users\Renat\.gemini\antigravity\brain\49e69d24-e071-4685-b5da-2bf81f94a438"
+                if os.path.isdir(art_dir):
+                    with open(os.path.join(art_dir, filename), "wb") as f:
+                        f.write(img_bytes)
+                self.send_json_response({"success": True})
+            except Exception as e:
+                self.send_json_response({"error": str(e)}, status=500)
+            return
+
+        if parsed.path == "/api/roblox-account":
+            length = int(self.headers.get("Content-Length", 0))
+            body = self.rfile.read(length).decode("utf-8") if length > 0 else "{}"
+            try:
+                data = json.loads(body)
+            except Exception:
+                data = {}
+
+            cookie_to_use = ""
+            if data.get("autoDetect"):
+                cookie_to_use = extract_local_roblox_cookie()
+                if not cookie_to_use:
+                    self.send_json_response({
+                        "success": False,
+                        "error": "Could not automatically detect Roblox cookie from this PC. Please enter .ROBLOSECURITY manually."
+                    }, status=404)
+                    return
+            else:
+                cookie_to_use = data.get("cookie", "").strip()
+
+            valid, user_dict, err_msg = validate_roblox_cookie(cookie_to_use)
+            if not valid or not user_dict:
+                self.send_json_response({
+                    "success": False,
+                    "error": err_msg or "Invalid Roblox cookie"
+                }, status=400)
+                return
+
+            save_roblox_session(user_dict)
+            self.send_json_response({
+                "success": True,
+                "user": {
+                    "userId": user_dict.get("userId"),
+                    "username": user_dict.get("username"),
+                    "displayName": user_dict.get("displayName"),
+                    "avatarUrl": user_dict.get("avatarUrl")
+                }
+            })
+            return
+
+        if parsed.path == "/api/roblox-account/logout":
+            clear_roblox_session()
+            self.send_json_response({"success": True})
+            return
 
         if parsed.path == "/api/build":
             if sys.platform != "win32":

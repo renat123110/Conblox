@@ -4,6 +4,7 @@
  */
 
 import { Instance } from './Instance.js';
+import { Signal } from './Signal.js';
 import { Vector3, Color3 } from './Math3D.js';
 import { Part } from './BasePart.js';
 import { BloomEffect, Atmosphere, SunRaysEffect, DepthOfFieldEffect, Sky, Clouds, Camera, Terrain } from './OtherInstances.js';
@@ -120,7 +121,22 @@ export class PlayersService extends Instance {
     constructor() {
         super('Players');
         this.Name = 'Players';
-        this.LocalPlayer = null;
+        this._localPlayer = null;
+    }
+
+    get LocalPlayer() {
+        if (!this._localPlayer) {
+            this._localPlayer = new Instance('Player');
+            this._localPlayer.Name = 'Player';
+            this._localPlayer.CharacterAdded = new Signal();
+            this._localPlayer.Chatted = new Signal();
+            this._localPlayer.Parent = this;
+        }
+        return this._localPlayer;
+    }
+
+    set LocalPlayer(val) {
+        this._localPlayer = val;
     }
 }
 

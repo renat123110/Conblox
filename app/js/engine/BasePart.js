@@ -235,6 +235,43 @@ export class SpawnLocation extends BasePart {
     }
 }
 
+export class MeshPart extends Part {
+    constructor() {
+        super();
+        this.className = 'MeshPart';
+        this._name = 'MeshPart';
+        this.meshId = '';
+        this.textureID = '';
+    }
+
+    get MeshId() { return this.meshId; }
+    set MeshId(val) {
+        this.meshId = String(val);
+        this.Changed.Fire('MeshId', this.meshId);
+    }
+
+    get TextureID() { return this.textureID; }
+    set TextureID(val) {
+        this.textureID = String(val);
+        this.Changed.Fire('TextureID', this.textureID);
+    }
+
+    serializeProperties() {
+        return {
+            ...super.serializeProperties(),
+            meshId: this.meshId,
+            textureID: this.textureID
+        };
+    }
+
+    deserializeProperties(props) {
+        super.deserializeProperties(props);
+        if (props.meshId !== undefined) this.meshId = props.meshId;
+        if (props.textureID !== undefined) this.textureID = props.textureID;
+    }
+}
+
 Instance.register('BasePart', BasePart);
 Instance.register('Part', Part);
 Instance.register('SpawnLocation', SpawnLocation);
+Instance.register('MeshPart', MeshPart);

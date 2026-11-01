@@ -10,7 +10,7 @@ export class HistoryManager {
         this.getSelectedInfo = getSelectedInfo;
         this.history = [];
         this.currentIndex = -1;
-        this.maxHistory = 50;
+        this.maxHistory = 20;
         this.isRestoring = false;
     }
 
@@ -49,12 +49,15 @@ export class HistoryManager {
             selectedItems = [{ id: selId, name: selName }];
         }
 
+        const newHash = JSON.stringify(servicesMap);
+
         const entry = {
             services: servicesMap,
             workspace: servicesMap['Workspace'],
             selectedId: selId,
             selectedName: selName,
-            selectedItems
+            selectedItems,
+            hash: newHash
         };
 
         // Discard any forward redo history if a new action is performed
@@ -65,8 +68,7 @@ export class HistoryManager {
         // Avoid recording duplicate identical states
         if (this.history.length > 0 && this.currentIndex >= 0) {
             const currentRecord = this.history[this.currentIndex];
-            const prevHash = JSON.stringify(currentRecord.services || currentRecord.workspace);
-            const newHash = JSON.stringify(servicesMap);
+            const prevHash = currentRecord.hash || JSON.stringify(currentRecord.services || currentRecord.workspace);
             const previousSelection = currentRecord.selectedItems || (currentRecord.selectedId
                 ? [{ id: currentRecord.selectedId }]
                 : []);

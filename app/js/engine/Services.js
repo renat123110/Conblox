@@ -200,6 +200,12 @@ export const Enum = {
         Default: 0,
         LockCenter: 1,
         LockCurrentPosition: 2
+    }),
+    AnimationPriority: new EnumCollection('AnimationPriority', {
+        Idle: 0,
+        Movement: 1,
+        Action: 2,
+        Core: 1000
     })
 };
 

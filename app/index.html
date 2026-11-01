@@ -81,10 +81,11 @@
             if (!errBox) {
                 errBox = document.createElement('div');
                 errBox.id = 'debug-error-box';
-                errBox.style = 'position:fixed;bottom:10px;left:10px;z-index:99999;background:#e53935;color:white;padding:12px;font-family:monospace;border-radius:6px;max-width:80%;word-break:break-all;box-shadow:0 4px 16px rgba(0,0,0,0.5);';
+                errBox.style = 'position:fixed;bottom:10px;left:10px;z-index:99999;background:#e53935;color:white;padding:12px 32px 12px 12px;font-family:monospace;border-radius:6px;max-width:80%;word-break:break-all;box-shadow:0 4px 16px rgba(0,0,0,0.5);';
                 document.body.appendChild(errBox);
             }
-            errBox.innerHTML = '<b>Startup Error:</b> ' + e.message + '<br><small>' + (e.filename || '') + ':' + (e.lineno || '') + '</small>';
+            errBox.innerHTML = '<span style="position:absolute;top:6px;right:10px;cursor:pointer;font-weight:bold;font-size:18px;line-height:1;" onclick="this.parentElement.remove()">&times;</span>' +
+                '<b>Studio Error:</b> ' + e.message + '<br><small>' + (e.filename || '') + ':' + (e.lineno || '') + '</small>';
         });
 
         // Check if opened via file:// protocol
@@ -130,8 +131,18 @@
         })();
     </script>
 
+    <!-- Engine Global Exposer -->
+    <script type="module">
+        import { Instance } from './js/engine/Instance.js';
+        window.Instance = Instance;
+        globalThis.Instance = Instance;
+    </script>
+
     <!-- Application Bootstrap -->
     <script type="module">
+        import { Instance } from './js/engine/Instance.js';
+        window.Instance = Instance;
+        globalThis.Instance = Instance;
         import { StudioApp } from './js/studio/StudioApp.js';
 
         function start() {

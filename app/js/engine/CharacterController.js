@@ -14,10 +14,10 @@
  *   No animations (static pose per user request).
  */
 
-import { Vector3, nearestEulerYXZ } from './Math3D.js';
+import { Vector3, nearestEulerYXZ, CFrame } from './Math3D.js';
 import { Instance } from './Instance.js';
 import { Signal } from './Signal.js';
-import { Model, Folder, Tool } from './OtherInstances.js';
+import { Model, Folder, Tool, AnimationTrack, Humanoid } from './OtherInstances.js';
 import { nativeInputManager } from './NativeInputManager.js';
 
 export class CharacterController {
@@ -32,6 +32,7 @@ export class CharacterController {
         this.rootPart = null;
         this.parts = {};
         this.starterCharacterTemplate = null;
+        this._cachedAnimateTemplate = null;
         this.active = false;
         this.isPaused = false;
         this.isDead = false;
@@ -82,11 +83,94 @@ export class CharacterController {
         this.onContextMenu = (e) => { if (this.active) e.preventDefault(); };
     }
 
+    getEffectiveHipHeight(char = this.character, rootPart = this.rootPart) {
+        if (!this.humanoid) return 2.0;
+        if (!this.humanoid.AutomaticScalingEnabled) {
+            return Math.max(0, Number(this.humanoid.HipHeight) || 0);
+        }
+
+        const targetChar = char || this.character;
+        const targetRoot = rootPart || this.rootPart;
+        if (!targetChar || !targetRoot) return 2.0;
+
+        const rootBottom = targetRoot.Position.y - targetRoot.Size.y / 2;
+        let lowestY = rootBottom;
+        const parts = targetChar.GetDescendants().filter(i => i.IsA && i.IsA('BasePart') && i !== targetRoot);
+        for (const p of parts) {
+            const bottom = p.Position.y - p.Size.y / 2;
+            if (bottom < lowestY) {
+                lowestY = bottom;
+            }
+        }
+
+        const autoHipHeight = Math.max(0, rootBottom - lowestY);
+        return autoHipHeight > 0.1 ? autoHipHeight : 2.0;
+    }
+
+    _updateCharacterPhysicsShape(body) {
+        if (!body || !this.rootPart || typeof CANNON === 'undefined') return;
+        body._isCharacterBody = true;
+        const effectiveHipHeight = this.getEffectiveHipHeight();
+        const rootSize = this.rootPart.Size || new Vector3(2, 2, 1);
+
+        const feetRelY = -(rootSize.y / 2 + effectiveHipHeight);
+        const headTopRelY = (rootSize.y / 2 + 1.2);
+        const totalHeight = headTopRelY - feetRelY;
+        const centerRelY = feetRelY + totalHeight / 2;
+
+        if (body._lastEffectiveHipHeight !== undefined) {
+            const diff = effectiveHipHeight - body._lastEffectiveHipHeight;
+            if (Math.abs(diff) > 0.001) {
+                body.position.y += diff;
+                body.velocity.y = 0;
+            }
+        }
+        body._lastEffectiveHipHeight = effectiveHipHeight;
+
+        body.shapes.length = 0;
+        body.shapeOffsets.length = 0;
+        body.shapeOrientations.length = 0;
+
+        const halfX = Math.max(0.6, rootSize.x / 2);
+        const halfY = totalHeight / 2;
+        const halfZ = Math.max(0.4, rootSize.z / 2);
+        const shape = new CANNON.Box(new CANNON.Vec3(halfX, halfY, halfZ));
+        body.addShape(shape, new CANNON.Vec3(0, centerRelY, 0));
+        body.updateMassProperties();
+    }
+
+    async _integrateAnimateScript(char) {
+        try {
+            if (!this._cachedAnimateTemplate) {
+                const resp = await fetch('/Animate.rbxm');
+                if (resp.ok) {
+                    const { parseRbxm } = await import('../studio/RbxmImporter.js');
+                    const parsed = parseRbxm(new Uint8Array(await resp.arrayBuffer()));
+                    this._cachedAnimateTemplate = parsed.roots.find(r => r.Name === 'Animate') || parsed.roots[0];
+                }
+            }
+            if (this._cachedAnimateTemplate && char && char.Parent) {
+                const cloned = this._cachedAnimateTemplate.Clone();
+                if (cloned) {
+                    cloned.Parent = char;
+                    if (window.conbloxStudio?.scriptRunner) {
+                        window.conbloxStudio.scriptRunner.runScript(cloned);
+                    }
+                }
+            }
+        } catch (e) {
+            console.warn('Could not integrate Animate.rbxm:', e);
+        }
+    }
+
     // ─── SPAWN / DESPAWN ───────────────────────────────────────────
 
     spawn(atPosition = null) {
         this.despawn();
         this.isDead = false;
+        if (typeof AnimationTrack?.preloadStandardAnimations === 'function') {
+            AnimationTrack.preloadStandardAnimations();
+        }
 
         // Find spawn location surface Y or default to baseplate surface
         let spawnSurfaceY = 0;
@@ -100,49 +184,126 @@ export class CharacterController {
             spawnZ = sp.Position.z;
         }
 
-        const rootCenterY = atPosition ? atPosition.y : spawnSurfaceY + 3;
         if (atPosition) {
             spawnX = atPosition.x;
             spawnZ = atPosition.z;
         }
 
-        const char = this.starterCharacterTemplate.Clone();
-        if (!char) throw new Error('StarterCharacter.rbxm could not be cloned');
+        let template = null;
+        const starterPlayer = this.dataModel.StarterPlayer;
+        if (starterPlayer) {
+            const sc = starterPlayer.FindFirstChild('StarterCharacter');
+            if (sc && sc.IsA && sc.IsA('Model')) {
+                template = sc;
+            } else {
+                const models = (starterPlayer.GetChildren ? starterPlayer.GetChildren() : []).filter(c =>
+                    c && c.IsA && c.IsA('Model') &&
+                    c.Name !== 'StarterPlayerScripts' &&
+                    c.Name !== 'StarterCharacterScripts'
+                );
+                if (models.length > 0) {
+                    template = models.find(m => m.FindFirstChildOfClass && m.FindFirstChildOfClass('Humanoid', true)) || models[0];
+                }
+            }
+        }
+        if (!template) {
+            template = this.starterCharacterTemplate;
+        }
+
+        const char = template.Clone();
+        if (!char) throw new Error('Character template could not be cloned');
         char.Name = 'Player';
         this.humanoid = char.FindFirstChildOfClass('Humanoid', true);
-        const rootPart = char.FindFirstChild('HumanoidRootPart', true);
-        const torso = char.FindFirstChild('Torso', true);
-        const head = char.FindFirstChild('Head', true);
-        const leftArm = char.FindFirstChild('Left Arm', true);
-        const rightArm = char.FindFirstChild('Right Arm', true);
-        const leftLeg = char.FindFirstChild('Left Leg', true);
-        const rightLeg = char.FindFirstChild('Right Leg', true);
-        if (!this.humanoid || !rootPart || !torso || !head || !leftArm || !rightArm || !leftLeg || !rightLeg) {
-            throw new Error('StarterCharacter.rbxm is missing required R6 parts');
+        if (!this.humanoid) {
+            this.humanoid = new Instance('Humanoid');
+            this.humanoid.Name = 'Humanoid';
+            this.humanoid.Parent = char;
         }
-        const faceDecal = head.FindFirstChild('face', true);
-        if (faceDecal) faceDecal.Face = 'Front';
-        head.Orientation = new Vector3(-90, head.Orientation.y, 180);
+
+        let rootPart = char.FindFirstChild('HumanoidRootPart', true);
+        const torso = char.FindFirstChild('Torso', true) || char.FindFirstChild('UpperTorso', true);
+        const head = char.FindFirstChild('Head', true);
+        const leftArm = char.FindFirstChild('Left Arm', true) || char.FindFirstChild('LeftUpperArm', true);
+        const rightArm = char.FindFirstChild('Right Arm', true) || char.FindFirstChild('RightUpperArm', true);
+        const leftLeg = char.FindFirstChild('Left Leg', true) || char.FindFirstChild('LeftUpperLeg', true);
+        const rightLeg = char.FindFirstChild('Right Leg', true) || char.FindFirstChild('RightUpperLeg', true);
+
+        if (!rootPart && torso) {
+            rootPart = torso;
+        }
+        if (!rootPart) {
+            rootPart = char.GetDescendants().find(instance => instance.IsA && instance.IsA('BasePart'));
+        }
+
+        const effectiveHipHeight = this.getEffectiveHipHeight(char, rootPart);
+        const rootHalfY = (rootPart && rootPart.Size) ? rootPart.Size.y / 2 : 1.0;
+        const rootCenterY = atPosition ? atPosition.y : (spawnSurfaceY + rootHalfY + effectiveHipHeight);
+
+        if (head) {
+            const faceDecal = head.FindFirstChild('face', true);
+            if (faceDecal) faceDecal.Face = 'Front';
+            head.Orientation = new Vector3(0, head.Orientation.y, 0);
+        }
 
         this.humanoid.WalkSpeed = 16;
         this.humanoid.JumpPower = 50;
         this.humanoid.MaxHealth = 100;
         this.humanoid.Health = 100;
-        const offset = new Vector3(spawnX, rootCenterY, spawnZ).sub(rootPart.Position);
-        for (const part of char.GetDescendants().filter(instance => instance.IsA('BasePart'))) {
+
+        const rootPos = rootPart ? rootPart.Position : (torso ? torso.Position : new Vector3(spawnX, rootCenterY, spawnZ));
+        const offset = new Vector3(spawnX, rootCenterY, spawnZ).sub(rootPos);
+        for (const part of char.GetDescendants().filter(instance => instance.IsA && instance.IsA('BasePart'))) {
             part.Position = part.Position.add(offset);
             part.Anchored = false;
             part.CanCollide = false;
             part.Locked = true;
         }
-        rootPart.Size = new Vector3(2, 6, 1);
-        rootPart.CanCollide = true;
+        if (rootPart) {
+            rootPart.CanCollide = true;
+            char.PrimaryPart = rootPart;
+        }
 
-        char.PrimaryPart = rootPart;
+        // Relink any Motor6Ds and Welds that might have lost Part0/Part1 references after cloning
+        for (const m of char.GetDescendants().filter(x => x.ClassName === 'Motor6D' || x.ClassName === 'Weld' || x.ClassName === 'ManualWeld')) {
+            if (!m.Part0 || !char.IsAncestorOf(m.Part0) || !m.Part1 || !char.IsAncestorOf(m.Part1)) {
+                if (m.Name === 'RootJoint') { m.Part0 = rootPart; m.Part1 = torso; }
+                else if (m.Name === 'Neck') { m.Part0 = torso; m.Part1 = head; }
+                else if (m.Name === 'Right Shoulder') { m.Part0 = torso; m.Part1 = rightArm; }
+                else if (m.Name === 'Left Shoulder') { m.Part0 = torso; m.Part1 = leftArm; }
+                else if (m.Name === 'Right Hip') { m.Part0 = torso; m.Part1 = rightLeg; }
+                else if (m.Name === 'Left Hip') { m.Part0 = torso; m.Part1 = leftLeg; }
+                else if (m.Name === 'AccessoryWeld' || m.Parent?.Name === 'Handle') {
+                    const handle = m.Parent && m.Parent.IsA && m.Parent.IsA('BasePart') ? m.Parent : char.FindFirstChild('Handle', true);
+                    if (handle) m.Part0 = handle;
+                    const att = handle?.FindFirstChildOfClass ? handle.FindFirstChildOfClass('Attachment') : null;
+                    if (att) {
+                        for (const p of char.GetDescendants().filter(x => x.IsA && x.IsA('BasePart') && x !== handle)) {
+                            if (p.FindFirstChild(att.Name)) {
+                                m.Part1 = p;
+                                if (!m.C0 || (m.C0.position.magnitude === 0 && m.C0.orientation.magnitude === 0)) m.C0 = att.CFrame ? att.CFrame.clone() : new CFrame();
+                                if (!m.C1 || (m.C1.position.magnitude === 0 && m.C1.orientation.magnitude === 0)) m.C1 = p.FindFirstChild(att.Name).CFrame ? p.FindFirstChild(att.Name).CFrame.clone() : new CFrame();
+                                break;
+                            }
+                        }
+                    }
+                    if (!m.Part1) {
+                        m.Part1 = head || torso;
+                    }
+                }
+            }
+        }
+
+        // Attach and ensure all accessories in the character are properly welded
+        const accessories = char.GetDescendants().filter(x => x.ClassName === 'Accessory' || (x.IsA && x.IsA('Accessory')));
+        for (const acc of accessories) {
+            Humanoid.attachAccessoryToCharacter(char, acc);
+        }
+
         char.Parent = this.dataModel.Workspace;
 
         this.character = char;
         this.rootPart = rootPart;
+
         this.parts = { rootPart, torso, head, leftArm, rightArm, leftLeg, rightLeg };
 
         // Connect Character Model to LocalPlayer
@@ -151,8 +312,11 @@ export class CharacterController {
                 const localPlayer = new Instance('Player');
                 localPlayer.Name = 'Player';
                 localPlayer.CharacterAdded = new Signal();
+                localPlayer.Chatted = new Signal();
                 localPlayer.Parent = this.dataModel.Players;
                 this.dataModel.Players.LocalPlayer = localPlayer;
+            } else if (!this.dataModel.Players.LocalPlayer.Chatted) {
+                this.dataModel.Players.LocalPlayer.Chatted = new Signal();
             }
             const localPlayer = this.dataModel.Players.LocalPlayer;
             let backpack = localPlayer.FindFirstChild('Backpack');
@@ -183,7 +347,7 @@ export class CharacterController {
         this.isOrbitMouseDown = false;
 
         // Authentic Roblox: Move/clone all items from StarterPlayer.StarterCharacterScripts into Character
-        const starterPlayer = this.dataModel.StarterPlayer;
+        // starterPlayer already declared above
         if (starterPlayer && starterPlayer.StarterCharacterScripts) {
             for (const item of starterPlayer.StarterCharacterScripts.GetChildren()) {
                 const cloned = item.Clone();
@@ -195,6 +359,11 @@ export class CharacterController {
                     }
                 }
             }
+        }
+
+        // Integrate Animate.rbxm LocalScript into character if not present
+        if (!char.FindFirstChild('Animate')) {
+            this._integrateAnimateScript(char);
         }
 
         // Humanoid death handler
@@ -215,9 +384,19 @@ export class CharacterController {
                 body.angularDamping = 1;
                 body.fixedRotation = true;
                 body.angularFactor = new CANNON.Vec3(0, 0, 0);
-                body.updateMassProperties();
+                this._updateCharacterPhysicsShape(body);
             }
         }
+
+        // Dynamically update physics shape when HipHeight or AutomaticScalingEnabled is modified
+        this.humanoid.Changed.Connect((prop) => {
+            if (prop === 'HipHeight' || prop === 'AutomaticScalingEnabled') {
+                const body = this.physicsEngine?.bodyMap?.get(this.rootPart);
+                if (body) {
+                    this._updateCharacterPhysicsShape(body);
+                }
+            }
+        });
 
         // Reset camera and character state
         this.cameraYaw = 0; // behind character looking along -Z
@@ -523,8 +702,9 @@ export class CharacterController {
         }
 
         // 2. Downward raycasts from 5 sample points on the feet
-        // Feet bottom is at body.position.y - 2.5
-        const footY = body.position.y - 2.5;
+        const effectiveHipHeight = this.getEffectiveHipHeight();
+        const rootHalfY = (this.rootPart && this.rootPart.Size) ? this.rootPart.Size.y / 2 : 1.0;
+        const footY = body.position.y - (rootHalfY + effectiveHipHeight);
         const rayCheckDist = 0.35; // check 0.35 studs below feet
 
         // Candidate bodies for ground: exclude player's own body
@@ -706,9 +886,31 @@ export class CharacterController {
             body.velocity.z = 0;
         }
 
-        // ── Jump Handling (Continuous jumping when holding Space, strict ground check) ──
+        // ── Ground detection ──
         const onGround = this._isOnGround(body);
         const now = performance.now();
+
+        // ── Fire Humanoid Running signal ──
+        const horizSpeed = Math.sqrt(body.velocity.x * body.velocity.x + body.velocity.z * body.velocity.z);
+        if (onGround) {
+            if (this.humanoid && this.humanoid.FreeFalling && this._wasFreeFalling) {
+                this._wasFreeFalling = false;
+                this.humanoid.FreeFalling.Fire(false);
+            }
+            if (this.humanoid && this.humanoid.Running) {
+                this.humanoid.Running.Fire(horizSpeed);
+            }
+        } else {
+            if (body.velocity.y < -2.0 && this.humanoid && this.humanoid.FreeFalling && !this._wasFreeFalling) {
+                this._wasFreeFalling = true;
+                this.humanoid.FreeFalling.Fire(true);
+            }
+            if (body.velocity.y < 6) {
+                body.velocity.y -= 24 * dt;
+            }
+        }
+
+        // ── Jump Handling (Continuous jumping when holding Space, strict ground check) ──
         const jumpPower = this.humanoid ? (this.humanoid.JumpPower !== undefined ? Number(this.humanoid.JumpPower) : 50) : 50;
         const canJump = onGround && (now - this.lastJumpTime > 250) && (body.velocity.y <= 0.5) && (jumpPower > 0);
 
@@ -716,20 +918,85 @@ export class CharacterController {
             body.velocity.y = jumpPower * 0.38; // Authentic Roblox jump height (~4.8 studs) and snappy instant ascent
             this.lastJumpTime = now;
             this.isJumping = true;
+            this._wasFreeFalling = false;
             if (this.soundEngine) {
                 this.soundEngine.playJump();
             }
-        }
-
-        // Authentic Roblox snappy air physics: eliminate floatiness near apex & during fall
-        if (!onGround) {
-            if (body.velocity.y < 6) {
-                body.velocity.y -= 24 * dt;
+            if (this.humanoid && this.humanoid.Jumping) {
+                this.humanoid.Jumping.Fire(true);
             }
         }
 
         if (onGround && (now - this.lastJumpTime > 250)) {
             this.isJumping = false;
+        }
+
+        // ── Step active animations and apply poses to character Motor6Ds ──
+        if (this.humanoid && this.humanoid._activeAnimationTracks) {
+            for (const track of this.humanoid._activeAnimationTracks) {
+                if (track.isPlaying) {
+                    track.step(dt);
+                }
+            }
+        }
+
+        if (this.humanoid && this.humanoid._activeAnimationTracks && this.character) {
+            const motors = this.character.GetDescendants().filter(i => i.ClassName === 'Motor6D');
+            const PRIORITY_ORDER = { Action4: 7, Action3: 6, Action2: 5, Action: 4, Movement: 3, Idle: 2, Core: 1 };
+            const activeTracks = Array.from(this.humanoid._activeAnimationTracks).filter(t => t.isPlaying && t.weight > 0.001);
+
+            for (const motor of motors) {
+                if (!motor.Part1) continue;
+                const partName = motor.Part1.Name;
+
+                const trackContributions = [];
+                for (const track of activeTracks) {
+                    const pose = track.poseAt(partName, track.timePosition);
+                    if (pose) {
+                        const prio = PRIORITY_ORDER[track.priority] || (track.name === 'WalkAnim' || track.name === 'RunAnim' ? 3 : (track.name === 'JumpAnim' ? 4 : 1));
+                        trackContributions.push({ pose, weight: track.weight, priority: prio });
+                    }
+                }
+
+                if (trackContributions.length === 0) {
+                    if (!motor._manualTransform) {
+                        motor.Transform = this._interpolateCFrame(motor.Transform, new CFrame(), Math.min(1, dt * 15));
+                    }
+                    continue;
+                }
+
+                let blendedPose = null;
+                if (trackContributions.length === 1) {
+                    const c = trackContributions[0];
+                    if (c.weight >= 0.99) {
+                        blendedPose = c.pose;
+                    } else {
+                        blendedPose = this._interpolateCFrame(new CFrame(), c.pose, c.weight);
+                    }
+                } else {
+                    // Sort lowest priority to highest priority (e.g. Core -> Idle -> Movement -> Action)
+                    trackContributions.sort((a, b) => a.priority - b.priority);
+
+                    // Blend layers progressively so higher priority smoothly blends over lower priority
+                    blendedPose = trackContributions[0].pose;
+                    let accumWeight = trackContributions[0].weight;
+
+                    for (let i = 1; i < trackContributions.length; i++) {
+                        const next = trackContributions[i];
+                        const alpha = Math.min(1.0, Math.max(0.0, next.weight));
+                        blendedPose = this._interpolateCFrame(blendedPose, next.pose, alpha);
+                        accumWeight = Math.max(accumWeight, next.weight);
+                    }
+                    if (accumWeight < 0.99) {
+                        blendedPose = this._interpolateCFrame(new CFrame(), blendedPose, accumWeight);
+                    }
+                }
+
+                if (blendedPose) {
+                    // Smooth motor.Transform so sudden transitions are seamlessly dampened
+                    motor.Transform = this._interpolateCFrame(motor.Transform, blendedPose, Math.min(1, dt * 25));
+                }
+            }
         }
 
         // ── Keep body upright and facing movement angle ──
@@ -768,9 +1035,7 @@ export class CharacterController {
         const syncTransform = (part, pos, partOrientation = null) => {
             if (!part) return;
             part.Position = pos;
-            const orientation = partOrientation || (part === this.parts.head
-                ? new Vector3(-90, orientDeg.y, 180)
-                : orientDeg);
+            const orientation = partOrientation || orientDeg;
             part.Orientation = orientation;
             if (vp && vp.partMeshes) {
                 const mesh = vp.partMeshes.get(part);
@@ -817,54 +1082,152 @@ export class CharacterController {
         if (this.parts.rightLeg) {
             syncTransform(this.parts.rightLeg, worldPos(0.5, -2, 0));
         }
-        if (this.character && typeof THREE !== 'undefined') {
-            const pendingMotors = this.character.GetDescendants().filter(instance => instance.ClassName === 'Motor6D' && instance.Enabled);
-            const applyMotorsFrom = (startParts) => {
-                const knownParts = new Set(startParts);
-                let progressed = true;
-                while (progressed) {
-                    progressed = false;
-                    for (let index = pendingMotors.length - 1; index >= 0; index--) {
-                        const motor = pendingMotors[index];
-                        if (!motor.Part0 || !motor.Part1 || !knownParts.has(motor.Part0)) continue;
+        const THREE_LIB = (typeof THREE !== 'undefined' ? THREE : (window.conbloxStudio?.viewport?.THREE || globalThis.THREE));
+        if (this.character && THREE_LIB) {
+            const allKnownParts = new Set([
+                this.rootPart,
+                this.parts.torso,
+                this.parts.head,
+                this.parts.leftArm,
+                this.parts.rightArm,
+                this.parts.leftLeg,
+                this.parts.rightLeg
+            ].filter(Boolean));
 
-                        const toMatrix = (frame) => {
-                            const object = new THREE.Object3D();
-                            object.position.set(frame.position.x, frame.position.y, frame.position.z);
-                            object.rotation.set(
-                                frame.orientation.x * Math.PI / 180,
-                                frame.orientation.y * Math.PI / 180,
-                                frame.orientation.z * Math.PI / 180,
-                                'YXZ'
-                            );
-                            object.updateMatrix();
-                            return object.matrix;
-                        };
-                        const part0 = motor.Part0;
-                        const part1 = motor.Part1;
-                        const part1Matrix = toMatrix({ position: part0.Position, orientation: part0.Orientation })
-                            .multiply(toMatrix(motor.C0))
-                            .multiply(toMatrix(motor.Transform))
-                            .multiply(new THREE.Matrix4().makeRotationX(motor.CurrentAngle))
-                            .multiply(toMatrix(motor.C1).invert());
-                        const position = new THREE.Vector3();
-                        const quaternion = new THREE.Quaternion();
-                        const scale = new THREE.Vector3();
-                        part1Matrix.decompose(position, quaternion, scale);
-                        const euler = new THREE.Euler().setFromQuaternion(quaternion, 'YXZ');
-                        const orientation = nearestEulerYXZ(euler, motor._lastAppliedPart1Orientation || part1.Orientation);
-                        motor._lastAppliedPart1Orientation = orientation;
-                        syncTransform(part1, new Vector3(position.x, position.y, position.z), orientation);
-                        knownParts.add(part1);
-                        pendingMotors.splice(index, 1);
-                        progressed = true;
-                    }
-                }
+            const toMatrix = (frame) => {
+                const object = new THREE_LIB.Object3D();
+                object.position.set(frame.position.x, frame.position.y, frame.position.z);
+                object.rotation.set(
+                    frame.orientation.x * Math.PI / 180,
+                    frame.orientation.y * Math.PI / 180,
+                    frame.orientation.z * Math.PI / 180,
+                    'YXZ'
+                );
+                object.updateMatrix();
+                return object.matrix;
             };
 
-            applyMotorsFrom([this.rootPart]);
-            applyMotorsFrom([this.parts.torso]);
+            const pendingMotors = this.character.GetDescendants().filter(instance => instance.ClassName === 'Motor6D' && instance.Enabled);
+            let progressed = true;
+            while (progressed) {
+                progressed = false;
+                for (let index = pendingMotors.length - 1; index >= 0; index--) {
+                    const motor = pendingMotors[index];
+                    if (!motor.Part0 || !motor.Part1 || !allKnownParts.has(motor.Part0)) continue;
+
+                    const part0 = motor.Part0;
+                    const part1 = motor.Part1;
+
+                    if (motor.DesiredAngle !== undefined && motor.CurrentAngle !== undefined && motor.DesiredAngle !== motor.CurrentAngle) {
+                        const step = (motor.MaxVelocity || 0.1) * (1/60) * 10;
+                        const diff = motor.DesiredAngle - motor.CurrentAngle;
+                        if (Math.abs(diff) <= step) {
+                            motor.CurrentAngle = motor.DesiredAngle;
+                        } else {
+                            motor.CurrentAngle += Math.sign(diff) * step;
+                        }
+                    }
+
+                    const part1Matrix = toMatrix({ position: part0.Position, orientation: part0.Orientation })
+                        .multiply(toMatrix(motor.C0))
+                        .multiply(toMatrix(motor.Transform))
+                        .multiply(new THREE_LIB.Matrix4().makeRotationX(motor.CurrentAngle))
+                        .multiply(toMatrix(motor.C1).invert());
+                    const position = new THREE_LIB.Vector3();
+                    const quaternion = new THREE_LIB.Quaternion();
+                    const scale = new THREE_LIB.Vector3();
+                    part1Matrix.decompose(position, quaternion, scale);
+                    const euler = new THREE_LIB.Euler().setFromQuaternion(quaternion, 'YXZ');
+                    const orientation = nearestEulerYXZ(euler, motor._lastAppliedPart1Orientation || part1.Orientation);
+                    motor._lastAppliedPart1Orientation = orientation;
+                    syncTransform(part1, new Vector3(position.x, position.y, position.z), orientation);
+                    allKnownParts.add(part1);
+                    pendingMotors.splice(index, 1);
+                    progressed = true;
+                }
+            }
+
+            // ── Solve all Welds in the character (including AccessoryWeld and tools) ──
+            const pendingWelds = this.character.GetDescendants().filter(
+                instance => (instance.ClassName === 'Weld' || instance.ClassName === 'ManualWeld' || instance.ClassName === 'WeldConstraint') && instance.Enabled
+            );
+            let weldProgressed = true;
+            while (weldProgressed) {
+                weldProgressed = false;
+                for (let index = pendingWelds.length - 1; index >= 0; index--) {
+                    const weld = pendingWelds[index];
+                    if (!weld.Part0 || !weld.Part1) continue;
+
+                    let sourcePart = null;
+                    let targetPart = null;
+                    let isPart0Target = false;
+
+                    if (allKnownParts.has(weld.Part1)) {
+                        sourcePart = weld.Part1;
+                        targetPart = weld.Part0;
+                        isPart0Target = true;
+                    } else if (allKnownParts.has(weld.Part0)) {
+                        sourcePart = weld.Part0;
+                        targetPart = weld.Part1;
+                        isPart0Target = false;
+                    }
+
+                    if (!sourcePart || !targetPart) continue;
+
+                    const mSource = toMatrix({ position: sourcePart.Position, orientation: sourcePart.Orientation });
+                    const mC0 = toMatrix(weld.C0 || new CFrame());
+                    const mC1 = toMatrix(weld.C1 || new CFrame());
+
+                    let targetMatrix;
+                    if (isPart0Target) {
+                        // Part0 * C0 = Part1 * C1  ==>  Part0 = Part1 * C1 * C0^-1
+                        targetMatrix = mSource.multiply(mC1).multiply(mC0.clone().invert());
+                    } else {
+                        // Part0 * C0 = Part1 * C1  ==>  Part1 = Part0 * C0 * C1^-1
+                        targetMatrix = mSource.multiply(mC0).multiply(mC1.clone().invert());
+                    }
+
+                    const position = new THREE_LIB.Vector3();
+                    const quaternion = new THREE_LIB.Quaternion();
+                    const scale = new THREE_LIB.Vector3();
+                    targetMatrix.decompose(position, quaternion, scale);
+                    const euler = new THREE_LIB.Euler().setFromQuaternion(quaternion, 'YXZ');
+                    const orientation = nearestEulerYXZ(euler, weld._lastAppliedOrientation || targetPart.Orientation);
+                    weld._lastAppliedOrientation = orientation;
+                    syncTransform(targetPart, new Vector3(position.x, position.y, position.z), orientation);
+                    allKnownParts.add(targetPart);
+                    pendingWelds.splice(index, 1);
+                    weldProgressed = true;
+                }
+            }
         }
+    }
+
+    _interpolateCFrame(a, b, alpha) {
+        if (!a) return b ? b.clone() : new CFrame();
+        if (!b) return a ? a.clone() : new CFrame();
+        if (alpha <= 0) return a.clone();
+        if (alpha >= 1) return b.clone();
+        const pos = a.position.lerp(b.position, alpha);
+        const THREE_LIB = (typeof THREE !== 'undefined' ? THREE : (window.conbloxStudio?.viewport?.THREE || globalThis.THREE));
+        if (THREE_LIB) {
+            const qa = new THREE_LIB.Quaternion().setFromEuler(new THREE_LIB.Euler(
+                (a.orientation.x * Math.PI) / 180,
+                (a.orientation.y * Math.PI) / 180,
+                (a.orientation.z * Math.PI) / 180,
+                'YXZ'
+            ));
+            const qb = new THREE_LIB.Quaternion().setFromEuler(new THREE_LIB.Euler(
+                (b.orientation.x * Math.PI) / 180,
+                (b.orientation.y * Math.PI) / 180,
+                (b.orientation.z * Math.PI) / 180,
+                'YXZ'
+            ));
+            const q = qa.slerp(qb, alpha);
+            const euler = new THREE_LIB.Euler().setFromQuaternion(q, 'YXZ');
+            return new CFrame(pos, nearestEulerYXZ(euler, a.orientation));
+        }
+        return new CFrame(pos, a.orientation.lerp(b.orientation, alpha));
     }
 
     // ─── CAMERA ────────────────────────────────────────────────────

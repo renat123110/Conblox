@@ -1,0 +1,14 @@
+{
+  "id": "inst_99_gn5xwu",
+  "name": "PlayerJumpAnim",
+  "className": "KeyframeSequence",
+  "archivable": true,
+  "attributes": {},
+  "tags": [],
+  "properties": {
+    "loop": false,
+    "priority": "Action",
+    "duration": 0
+  },
+  "children": []
+}

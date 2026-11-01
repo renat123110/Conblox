@@ -660,9 +660,7 @@ export class MultiplayerClient {
             mesh.position.set(relX, relY, relZ);
             mesh.rotation.order = 'YXZ';
 
-            if (part.Name === 'Head') {
-                mesh.rotation.set(-Math.PI / 2, 0, Math.PI);
-            } else if (part.Orientation) {
+            if (part.Orientation) {
                 mesh.rotation.set(
                     (part.Orientation.x * Math.PI) / 180,
                     (part.Orientation.y * Math.PI) / 180,
@@ -730,15 +728,17 @@ export class MultiplayerClient {
         addPart([1, 2, 1], [-0.5, -2, 0], 'Left Leg');
         addPart([1, 2, 1], [0.5, -2, 0], 'Right Leg');
 
-        // Head: rounded box or standard 2 x 1 x 1
-        const headGeo = vp?.createRoundedBoxGeometry
-            ? vp.createRoundedBoxGeometry(1.2078, 1.21242, 1.207847)
-            : new THREE.BoxGeometry(2, 1, 1);
+        // Head: head.obj via createHeadGeometry or rounded box fallback
+        const headGeo = vp?.createHeadGeometry
+            ? vp.createHeadGeometry()
+            : (vp?.createRoundedBoxGeometry
+                ? vp.createRoundedBoxGeometry(1.2078, 1.21242, 1.207847)
+                : new THREE.BoxGeometry(2, 1, 1));
         const headMat = makeMat();
         const headMesh = new THREE.Mesh(headGeo, headMat);
         headMesh.position.set(0, 1.5, 0);
         headMesh.rotation.order = 'YXZ';
-        headMesh.rotation.set(-Math.PI / 2, 0, Math.PI);
+        headMesh.rotation.set(0, 0, 0);
         headMesh.name = 'Head';
         headMesh.castShadow = true;
         headMesh.receiveShadow = true;

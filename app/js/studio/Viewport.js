@@ -5,6 +5,43 @@
 
 import { Vector3, Color3, CFrame } from '../engine/Math3D.js';
 import { nativeInputManager } from '../engine/NativeInputManager.js';
+import { createBufferGeometryFromMeshData, extractRobloxAssetId, fetchRobloxMeshData, parseObjString } from '../engine/RobloxMeshParser.js';
+
+let cachedHeadMeshData = null;
+let headMeshLoadPromise = null;
+
+export async function fetchHeadMeshData() {
+    if (cachedHeadMeshData) return cachedHeadMeshData;
+    if (!headMeshLoadPromise) {
+        headMeshLoadPromise = (async () => {
+            try {
+                const candidates = ['/content/head.obj', 'content/head.obj', '/api/head-obj'];
+                let text = null;
+                for (const url of candidates) {
+                    try {
+                        const res = await fetch(url);
+                        if (res.ok) {
+                            text = await res.text();
+                            break;
+                        }
+                    } catch (_) {}
+                }
+                if (!text) throw new Error('Could not fetch head.obj from content/head.obj');
+                cachedHeadMeshData = parseObjString(text);
+                return cachedHeadMeshData;
+            } catch (err) {
+                console.warn('[Viewport] Failed to load head.obj:', err);
+                headMeshLoadPromise = null;
+                return null;
+            }
+        })();
+    }
+    return headMeshLoadPromise;
+}
+
+if (typeof window !== 'undefined' && typeof fetch === 'function') {
+    fetchHeadMeshData().catch(() => {});
+}
 
 const LIGHT_CLASSES = new Set(['PointLight', 'SpotLight', 'SurfaceLight']);
 const HUMANOID_ROUNDED_PARTS = new Set(['Torso', 'Left Arm', 'Right Arm', 'Left Leg', 'Right Leg']);
@@ -62,6 +99,15 @@ function hasHumanoidModelAncestor(instance) {
         ancestor = ancestor.Parent;
     }
     return false;
+}
+
+function getHumanoidModelAncestor(instance) {
+    let ancestor = instance?.Parent;
+    while (ancestor) {
+        if (ancestor.IsA?.('Model') && ancestor.FindFirstChildOfClass?.('Humanoid')) return ancestor;
+        ancestor = ancestor.Parent;
+    }
+    return null;
 }
 
 function clipDecalPolygon(vertices, axis, bound, keepGreater) {
@@ -505,9 +551,18 @@ export class Viewport {
         };
         if (textureFiles[type]) {
             if (!this.materialTextureLoader) this.materialTextureLoader = new THREE.TextureLoader();
-            const texture = this.materialTextureLoader.load(`/content/textures/materials/${textureFiles[type]}`);
+            const texture = this.materialTextureLoader.load(
+                `/content/textures/materials/${textureFiles[type]}`,
+                (loaded) => {
+                    loaded.wrapS = THREE.RepeatWrapping;
+                    loaded.wrapT = THREE.RepeatWrapping;
+                    loaded.repeat.set(0.25, 0.25);
+                    loaded.needsUpdate = true;
+                }
+            );
             texture.wrapS = THREE.RepeatWrapping;
             texture.wrapT = THREE.RepeatWrapping;
+            texture.repeat.set(0.25, 0.25);
             this.materialTextures.set(type, texture);
             return texture;
         }
@@ -711,6 +766,7 @@ export class Viewport {
         const tex = new THREE.CanvasTexture(canvas);
         tex.wrapS = THREE.RepeatWrapping;
         tex.wrapT = THREE.RepeatWrapping;
+        tex.repeat.set(0.25, 0.25);
         tex.generateMipmaps = true;
         this.materialTextures.set(type, tex);
         return tex;
@@ -765,6 +821,7 @@ export class Viewport {
         const tex = new THREE.CanvasTexture(canvas);
         tex.wrapS = THREE.RepeatWrapping;
         tex.wrapT = THREE.RepeatWrapping;
+        tex.repeat.set(1, 1);
         tex.generateMipmaps = true;
         tex.minFilter = THREE.LinearMipmapLinearFilter;
         return tex;
@@ -807,6 +864,7 @@ export class Viewport {
         const tex = new THREE.CanvasTexture(canvas);
         tex.wrapS = THREE.RepeatWrapping;
         tex.wrapT = THREE.RepeatWrapping;
+        tex.repeat.set(0.25, 0.25);
         tex.generateMipmaps = true;
         tex.minFilter = THREE.LinearMipmapLinearFilter;
         return tex;
@@ -1693,6 +1751,53 @@ export class Viewport {
             metalness: 0.05
         };
 
+        const specialMesh = part.FindFirstChildOfClass?.('SpecialMesh');
+        if (specialMesh) {
+            let meshColor;
+            const vc = specialMesh.VertexColor;
+            const rx = (vc && !isNaN(Number(vc.x))) ? Number(vc.x) : 1;
+            const ry = (vc && !isNaN(Number(vc.y))) ? Number(vc.y) : 1;
+            const rz = (vc && !isNaN(Number(vc.z))) ? Number(vc.z) : 1;
+
+            if (specialMesh.TextureId) {
+                // When TextureId is set, modulate texture only by VertexColor (defaults to (1,1,1) white, not darkened by part.Color)
+                meshColor = new THREE.Color(rx, ry, rz);
+            } else {
+                // When no texture, color is part's BrickColor multiplied by VertexColor
+                meshColor = new THREE.Color(
+                    color.r * rx,
+                    color.g * ry,
+                    color.b * rz
+                );
+            }
+            const matProps = {
+                ...baseProps,
+                color: meshColor,
+                roughness: 0.35,
+                metalness: 0.05
+            };
+            if (specialMesh.TextureId) {
+                const tex = this.getSpecialMeshTexture(specialMesh.TextureId, part);
+                if (tex) matProps.map = tex;
+            }
+            if (part.Name === 'Head' && this.faceTexture && !specialMesh.TextureId) {
+                return new THREE.MeshStandardMaterial({ ...matProps, roughness: 0.5 });
+            }
+            return new THREE.MeshStandardMaterial(matProps);
+        }
+
+        // Clothing & CharacterMesh Texture mapping for R6 character limbs
+        const clothingTex = this.getClothingTextureForPart(part);
+        if (clothingTex) {
+            return new THREE.MeshStandardMaterial({
+                ...baseProps,
+                color: new THREE.Color(1, 1, 1),
+                roughness: 0.5,
+                metalness: 0.05,
+                map: clothingTex
+            });
+        }
+
         // Classic Head with Smiley Face decal (Face is on -Z front face in Roblox coords)
         if (part.Name === 'Head' && this.faceTexture) {
             const sideMat = new THREE.MeshStandardMaterial({ ...baseProps, roughness: hasSpecialMesh ? 0.7 : 0.35 });
@@ -1705,16 +1810,11 @@ export class Viewport {
         // Baseplate grid texture (if no child Texture is defined)
         const hasChildTexture = part.GetChildren && part.GetChildren().some(c => c.ClassName === 'Texture');
         if (part.Name === 'Baseplate' && this.baseplateTexture && !hasChildTexture) {
-            const tex = this.baseplateTexture.clone();
-            tex.wrapS = THREE.RepeatWrapping;
-            tex.wrapT = THREE.RepeatWrapping;
-            tex.repeat.set(0.25, 0.25);
-            tex.needsUpdate = true;
             return new THREE.MeshStandardMaterial({
                 ...baseProps,
                 roughness: 0.85,
                 metalness: 0.0,
-                map: tex
+                map: this.baseplateTexture
             });
         }
 
@@ -1745,11 +1845,7 @@ export class Viewport {
 
         // Ice Material (Glossy, slightly translucent)
         if (mat === 'Ice') {
-            const tex = this.getMaterialTexture('Ice').clone();
-            tex.wrapS = THREE.RepeatWrapping;
-            tex.wrapT = THREE.RepeatWrapping;
-            tex.repeat.set(0.25, 0.25);
-            tex.needsUpdate = true;
+            const tex = this.getMaterialTexture('Ice');
             return new THREE.MeshPhysicalMaterial({
                 ...baseProps,
                 transmission: 0.65,
@@ -1770,14 +1866,9 @@ export class Viewport {
             });
         }
 
-        // Helper to get scaled cloned texture
+        // Helper to get scaled material texture
         const getScaledTex = (type) => {
-            const tex = this.getMaterialTexture(type).clone();
-            tex.wrapS = THREE.RepeatWrapping;
-            tex.wrapT = THREE.RepeatWrapping;
-            tex.repeat.set(0.25, 0.25); // 1 tile per 4 studs uniformly across all 6 faces
-            tex.needsUpdate = true;
-            return tex;
+            return this.getMaterialTexture(type);
         };
 
         if (mat === 'Metal') {
@@ -1907,11 +1998,7 @@ export class Viewport {
         }
 
         if (mat === 'Plastic') {
-            const tex = this.getMaterialTexture('Plastic').clone();
-            tex.wrapS = THREE.RepeatWrapping;
-            tex.wrapT = THREE.RepeatWrapping;
-            tex.repeat.set(0.25, 0.25);
-            tex.needsUpdate = true;
+            const tex = this.getMaterialTexture('Plastic');
             return new THREE.MeshStandardMaterial({
                 ...baseProps,
                 roughness: 0.65,
@@ -1922,15 +2009,10 @@ export class Viewport {
         // Default: fallback material (with classic stud texture)
         let resultMat = null;
         if (this.studTexture) {
-            const tex = this.studTexture.clone();
-            tex.wrapS = THREE.RepeatWrapping;
-            tex.wrapT = THREE.RepeatWrapping;
-            tex.repeat.set(1, 1); // 1 stud per stud uniformly across all 6 faces
-            tex.needsUpdate = true;
             resultMat = new THREE.MeshStandardMaterial({
                 ...baseProps,
                 roughness: 0.65,
-                map: tex
+                map: this.studTexture
             });
         } else {
             resultMat = new THREE.MeshStandardMaterial({
@@ -1952,40 +2034,45 @@ export class Viewport {
         if (texVal.toLowerCase() === 'rbxasset://textures/face.png') {
             return this.createPresetDecalTexture('Smile');
         }
-        const isUrl = texVal.startsWith('http://') || texVal.startsWith('https://') ||
-                      texVal.startsWith('data:image/') || texVal.startsWith('blob:') ||
-                      texVal.startsWith('/') || texVal.startsWith('./');
+        const robloxAssetId = extractRobloxAssetId(texVal);
+        let loadUrl = texVal;
+        if (robloxAssetId && !texVal.startsWith('data:') && !texVal.startsWith('/')) {
+            loadUrl = `/api/roblox-asset?id=${encodeURIComponent(robloxAssetId)}`;
+        }
+        const isUrl = loadUrl.startsWith('http://') || loadUrl.startsWith('https://') ||
+                      loadUrl.startsWith('data:image/') || loadUrl.startsWith('blob:') ||
+                      loadUrl.startsWith('/') || loadUrl.startsWith('./');
 
         if (isUrl) {
             if (!this.decalTextureLoader) this.decalTextureLoader = new THREE.TextureLoader();
             if (!this.decalTextureCache) this.decalTextureCache = new Map();
             if (!this.decalPendingCallbacks) this.decalPendingCallbacks = new Map();
 
-            const cached = this.decalTextureCache.get(texVal);
+            const cached = this.decalTextureCache.get(loadUrl);
             if (cached) {
                 const isReady = Boolean(cached.image && (cached.image.complete !== false && (cached.image.width > 0 || cached.image.naturalWidth > 0)));
                 if (!isReady && onReady) {
-                    if (!this.decalPendingCallbacks.has(texVal)) {
-                        this.decalPendingCallbacks.set(texVal, []);
+                    if (!this.decalPendingCallbacks.has(loadUrl)) {
+                        this.decalPendingCallbacks.set(loadUrl, []);
                     }
-                    this.decalPendingCallbacks.get(texVal).push(onReady);
+                    this.decalPendingCallbacks.get(loadUrl).push(onReady);
                 }
                 return cached;
             }
 
             if (onReady) {
-                if (!this.decalPendingCallbacks.has(texVal)) {
-                    this.decalPendingCallbacks.set(texVal, []);
+                if (!this.decalPendingCallbacks.has(loadUrl)) {
+                    this.decalPendingCallbacks.set(loadUrl, []);
                 }
-                this.decalPendingCallbacks.get(texVal).push(onReady);
+                this.decalPendingCallbacks.get(loadUrl).push(onReady);
             }
 
             const tex = this.decalTextureLoader.load(
-                texVal,
+                loadUrl,
                 (loadedTex) => {
                     loadedTex.needsUpdate = true;
-                    const cbs = this.decalPendingCallbacks.get(texVal) || [];
-                    this.decalPendingCallbacks.delete(texVal);
+                    const cbs = this.decalPendingCallbacks.get(loadUrl) || [];
+                    this.decalPendingCallbacks.delete(loadUrl);
                     for (const cb of cbs) {
                         try { cb(loadedTex); } catch (e) { console.error('[Viewport] Decal callback error:', e); }
                     }
@@ -1993,12 +2080,12 @@ export class Viewport {
                 undefined,
                 (err) => {
                     console.warn('[Viewport] Failed to load decal texture:', err);
-                    this.decalPendingCallbacks.delete(texVal);
+                    this.decalPendingCallbacks.delete(loadUrl);
                 }
             );
             tex.wrapS = THREE.RepeatWrapping;
             tex.wrapT = THREE.RepeatWrapping;
-            this.decalTextureCache.set(texVal, tex);
+            this.decalTextureCache.set(loadUrl, tex);
             return tex;
         }
         return this.createPresetDecalTexture(texVal);
@@ -2057,45 +2144,52 @@ export class Viewport {
 
             const face = dec.Face || 'Front';
             switch (face) {
-                case 'Bottom': // -Z
+                case 'Bottom': // -Y (Roblox standard Bottom face)
+                    w = sx; h = sz;
+                    py = (-sy / 2) - eps;
+                    rx = Math.PI / 2;
+                    break;
+                case 'Top': // +Y (Roblox standard Top face)
+                    w = sx; h = sz;
+                    py = (sy / 2) + eps;
+                    rx = -Math.PI / 2;
+                    break;
+                case 'Front': // -Z (Roblox standard Front face)
                     w = sx; h = sy;
                     pz = (-sz / 2) - eps;
                     ry = Math.PI;
+                    if (isHeadMesh && dec.ClassName === 'Decal') {
+                        w *= 0.9;
+                        h *= 0.9;
+                    }
                     break;
                 case 'Back': // +Z (Roblox standard Back face)
                     w = sx; h = sy;
                     pz = (sz / 2) + eps;
                     ry = 0;
                     break;
-                case 'Top': // +Y
-                    w = sx; h = sz;
-                    py = (sy / 2) + eps;
-                    rx = -Math.PI / 2;
-                    break;
-                case 'Front': // -Y
-                    w = sx; h = sz;
-                    py = (-sy / 2) - eps;
-                    rx = Math.PI / 2;
-                    if (isHeadMesh && dec.ClassName === 'Decal') {
-                        w *= 0.9;
-                        h *= 0.9;
-                    }
-                    break;
-                case 'Right': // +X
+                case 'Right': // +X (Roblox standard Right face)
                     w = sz; h = sy;
                     px = (sx / 2) + eps;
                     ry = Math.PI / 2;
                     break;
-                case 'Left': // -X
+                case 'Left': // -X (Roblox standard Left face)
                     w = sz; h = sy;
                     px = (-sx / 2) - eps;
                     ry = -Math.PI / 2;
                     break;
             }
 
+            px += offset.x;
+            py += offset.y;
+            pz += offset.z;
+
             let texForOverlay = dTex.clone();
             if (dTex.image) {
                 texForOverlay.image = dTex.image;
+            }
+            if (this.renderer?.capabilities) {
+                texForOverlay.anisotropy = Math.min(16, this.renderer.capabilities.getMaxAnisotropy());
             }
 
             if (dec.ClassName === 'Texture') {
@@ -2104,18 +2198,17 @@ export class Viewport {
                 texForOverlay.wrapS = THREE.RepeatWrapping;
                 texForOverlay.wrapT = THREE.RepeatWrapping;
                 texForOverlay.repeat.set(Math.max(0.01, w / u), Math.max(0.01, h / v));
-                texForOverlay.needsUpdate = true;
+                if (texForOverlay.image) texForOverlay.needsUpdate = true;
             } else {
                 texForOverlay.wrapS = THREE.ClampToEdgeWrapping;
                 texForOverlay.wrapT = THREE.ClampToEdgeWrapping;
                 texForOverlay.repeat.set(1, 1);
-                texForOverlay.needsUpdate = true;
+                if (texForOverlay.image) texForOverlay.needsUpdate = true;
             }
 
             const projectorRotation = new THREE.Euler(rx, ry, rz);
             const projectorNormal = new THREE.Vector3(0, 0, 1).applyEuler(projectorRotation).normalize();
             const projectorCenter = new THREE.Vector3(px, py, pz)
-                .add(new THREE.Vector3(offset.x, offset.y, offset.z))
                 .addScaledVector(projectorNormal, -Math.min(sx, sy, sz) * 0.325);
             const decalGeometry = createProjectedDecalGeometry(
                 mesh.geometry,
@@ -2200,6 +2293,423 @@ export class Viewport {
         return tex;
     }
 
+    createWedgeGeometry(sx = 1, sy = 1, sz = 1) {
+        const geo = new THREE.BufferGeometry();
+        const hx = sx / 2, hy = sy / 2, hz = sz / 2;
+        const vertices = new Float32Array([
+            // Front triangle
+            -hx, -hy,  hz,    hx, -hy,  hz,   -hx,  hy,  hz,
+            // Back triangle
+            -hx, -hy, -hz,   -hx,  hy, -hz,    hx, -hy, -hz,
+            // Bottom quad
+            -hx, -hy, -hz,    hx, -hy, -hz,    hx, -hy,  hz,
+            -hx, -hy, -hz,    hx, -hy,  hz,   -hx, -hy,  hz,
+            // Sloped quad
+            -hx,  hy,  hz,    hx, -hy,  hz,    hx, -hy, -hz,
+            -hx,  hy,  hz,    hx, -hy, -hz,   -hx,  hy, -hz,
+            // Vertical back quad
+            -hx, -hy,  hz,   -hx,  hy,  hz,   -hx,  hy, -hz,
+            -hx, -hy,  hz,   -hx,  hy, -hz,   -hx, -hy, -hz,
+        ]);
+        geo.setAttribute('position', new THREE.BufferAttribute(vertices, 3));
+        geo.computeVertexNormals();
+
+        // Properly normalized [0, 1] UV coordinates for each face to prevent texture distortion
+        const uvs = new Float32Array([
+            // Front triangle
+            0, 0,   1, 0,   0, 1,
+            // Back triangle
+            1, 0,   1, 1,   0, 0,
+            // Bottom quad
+            0, 0,   1, 0,   1, 1,
+            0, 0,   1, 1,   0, 1,
+            // Sloped quad
+            0, 1,   1, 0,   1, 1,
+            0, 1,   1, 1,   0, 0,
+            // Vertical back quad
+            0, 0,   0, 1,   1, 1,
+            0, 0,   1, 1,   1, 0
+        ]);
+        geo.setAttribute('uv', new THREE.BufferAttribute(uvs, 2));
+        return geo;
+    }
+
+    getCharacterModelAncestor(part) {
+        return getHumanoidModelAncestor(part);
+    }
+
+    getCharacterMeshForPart(part) {
+        const model = this.getCharacterModelAncestor(part);
+        if (!model) return null;
+        const targetName = part.Name;
+        for (const child of model.GetChildren()) {
+            if (child.ClassName === 'CharacterMesh') {
+                if (child.getTargetPartName && child.getTargetPartName() === targetName) {
+                    return child;
+                }
+                const bp = Number(child.BodyPart);
+                if (bp === 1 && targetName === 'Torso') return child;
+                if (bp === 2 && targetName === 'Left Arm') return child;
+                if (bp === 3 && targetName === 'Right Arm') return child;
+                if (bp === 4 && targetName === 'Left Leg') return child;
+                if (bp === 5 && targetName === 'Right Leg') return child;
+            }
+        }
+        return null;
+    }
+
+    async ensureCharacterMeshLoaded(charMesh, part) {
+        const assetId = extractRobloxAssetId(charMesh.MeshId);
+        if (!assetId) return;
+
+        if (!this._loadingCharacterMeshes) this._loadingCharacterMeshes = new Set();
+        if (this._loadingCharacterMeshes.has(assetId)) return;
+        this._loadingCharacterMeshes.add(assetId);
+
+        try {
+            const data = await fetchRobloxMeshData(assetId);
+            if (data?.geometry) {
+                charMesh.MeshData = data.geometry;
+                this.rebuildPartMesh(part);
+            }
+        } catch (err) {
+            console.warn(`[CharacterMesh] Error loading mesh ${assetId}:`, err);
+        } finally {
+            this._loadingCharacterMeshes.delete(assetId);
+        }
+    }
+
+    partHasClothing(part) {
+        if (!part || !part.Parent) return false;
+        const model = this.getCharacterModelAncestor(part);
+        if (!model) return false;
+        const name = part.Name;
+        const hasShirt = model.GetChildren().some(c => c.ClassName === 'Shirt' && c.ShirtTemplate);
+        const hasPants = model.GetChildren().some(c => c.ClassName === 'Pants' && c.PantsTemplate);
+        const charMesh = this.getCharacterMeshForPart(part);
+        const hasMeshTex = Boolean(charMesh && (charMesh.BaseTextureId || charMesh.OverlayTextureId));
+        if (name === 'Torso') return hasShirt || hasPants || hasMeshTex;
+        if (name === 'Left Arm' || name === 'Right Arm') return hasShirt || hasMeshTex;
+        if (name === 'Left Leg' || name === 'Right Leg') return hasPants || hasMeshTex;
+        return false;
+    }
+
+    createClothingBoxGeometry(part, sx, sy, sz) {
+        const geo = new THREE.BoxGeometry(sx, sy, sz);
+        if (!geo.attributes.uv) return geo;
+        const uvs = geo.attributes.uv.array;
+        const name = part.Name;
+
+        let rects = null;
+        if (name === 'Torso') {
+            rects = {
+                right:  { x: 165, y: 74,  w: 64,  h: 128 },
+                left:   { x: 361, y: 74,  w: 64,  h: 128 },
+                top:    { x: 231, y: 8,   w: 128, h: 64  },
+                bottom: { x: 231, y: 204, w: 128, h: 64  },
+                front:  { x: 231, y: 74,  w: 128, h: 128 },
+                back:   { x: 427, y: 74,  w: 128, h: 128 }
+            };
+        } else if (name === 'Right Arm' || name === 'Right Leg') {
+            rects = {
+                left:   { x: 19,  y: 355, w: 64, h: 128 },
+                back:   { x: 85,  y: 355, w: 64, h: 128 },
+                right:  { x: 151, y: 355, w: 64, h: 128 },
+                front:  { x: 217, y: 355, w: 64, h: 128 },
+                top:    { x: 217, y: 289, w: 64, h: 64  },
+                bottom: { x: 217, y: 485, w: 64, h: 64  }
+            };
+        } else if (name === 'Left Arm' || name === 'Left Leg') {
+            rects = {
+                front:  { x: 307, y: 355, w: 64, h: 128 },
+                left:   { x: 373, y: 355, w: 64, h: 128 },
+                back:   { x: 439, y: 355, w: 64, h: 128 },
+                right:  { x: 505, y: 355, w: 64, h: 128 },
+                top:    { x: 307, y: 289, w: 64, h: 64  },
+                bottom: { x: 307, y: 485, w: 64, h: 64  }
+            };
+        }
+
+        if (rects) {
+            const W = 585, H = 559;
+            const setFaceUVs = (faceIndex, r, flipU = false, flipV = false) => {
+                const u0 = r.x / W;
+                const u1 = (r.x + r.w) / W;
+                const v1 = 1.0 - (r.y / H);
+                const v0 = 1.0 - ((r.y + r.h) / H);
+                const off = faceIndex * 8;
+                const leftU = flipU ? u1 : u0;
+                const rightU = flipU ? u0 : u1;
+                const topV = flipV ? v0 : v1;
+                const bottomV = flipV ? v1 : v0;
+                uvs[off + 0] = leftU;  uvs[off + 1] = topV;
+                uvs[off + 2] = rightU; uvs[off + 3] = topV;
+                uvs[off + 4] = leftU;  uvs[off + 5] = bottomV;
+                uvs[off + 6] = rightU; uvs[off + 7] = bottomV;
+            };
+
+            setFaceUVs(0, rects.right, false, false);
+            setFaceUVs(1, rects.left, false, false);
+            setFaceUVs(2, rects.top, true, true);
+            setFaceUVs(3, rects.bottom, true, true);
+            setFaceUVs(4, rects.back, false, false);
+            setFaceUVs(5, rects.front, false, false);
+
+            geo.attributes.uv.needsUpdate = true;
+        }
+
+        return geo;
+    }
+
+    applyClothingUVMappingToGeometry(geometry, limbName, sx, sy, sz) {
+        if (!geometry || !geometry.attributes.position) return geometry;
+        const nonIndexed = geometry.index ? geometry.toNonIndexed() : geometry;
+        const pos = nonIndexed.attributes.position.array;
+        const norm = nonIndexed.attributes.normal?.array;
+        const count = nonIndexed.attributes.position.count;
+        const uvs = new Float32Array(count * 2);
+
+        let rects = null;
+        let halfX = sx ? sx / 2 : (limbName === 'Torso' ? 1 : 0.5);
+        let halfY = sy ? sy / 2 : 1;
+        let halfZ = sz ? sz / 2 : 0.5;
+        if (limbName === 'Torso') {
+            halfX = 1; halfY = 1; halfZ = 0.5;
+            rects = {
+                right:  { x: 165, y: 74,  w: 64,  h: 128 },
+                left:   { x: 361, y: 74,  w: 64,  h: 128 },
+                top:    { x: 231, y: 8,   w: 128, h: 64  },
+                bottom: { x: 231, y: 204, w: 128, h: 64  },
+                front:  { x: 231, y: 74,  w: 128, h: 128 },
+                back:   { x: 427, y: 74,  w: 128, h: 128 }
+            };
+        } else if (limbName === 'Right Arm' || limbName === 'Right Leg') {
+            halfX = 0.5; halfY = 1; halfZ = 0.5;
+            rects = {
+                left:   { x: 19,  y: 355, w: 64, h: 128 },
+                back:   { x: 85,  y: 355, w: 64, h: 128 },
+                right:  { x: 151, y: 355, w: 64, h: 128 },
+                front:  { x: 217, y: 355, w: 64, h: 128 },
+                top:    { x: 217, y: 289, w: 64, h: 64  },
+                bottom: { x: 217, y: 485, w: 64, h: 64  }
+            };
+        } else if (limbName === 'Left Arm' || limbName === 'Left Leg') {
+            halfX = 0.5; halfY = 1; halfZ = 0.5;
+            rects = {
+                front:  { x: 307, y: 355, w: 64, h: 128 },
+                left:   { x: 373, y: 355, w: 64, h: 128 },
+                back:   { x: 439, y: 355, w: 64, h: 128 },
+                right:  { x: 505, y: 355, w: 64, h: 128 },
+                top:    { x: 307, y: 289, w: 64, h: 64  },
+                bottom: { x: 307, y: 485, w: 64, h: 64  }
+            };
+        }
+
+        if (!rects) return nonIndexed;
+
+        const W = 585, H = 559;
+        for (let i = 0; i < count; i++) {
+            const px = pos[i * 3];
+            const py = pos[i * 3 + 1];
+            const pz = pos[i * 3 + 2];
+            const nx = norm ? norm[i * 3] : 0;
+            const ny = norm ? norm[i * 3 + 1] : 0;
+            const nz = norm ? norm[i * 3 + 2] : 1;
+
+            const nxa = Math.abs(nx);
+            const nya = Math.abs(ny);
+            const nza = Math.abs(nz);
+
+            let r = rects.front;
+            let fu = 0.5;
+            let fv = 0.5;
+
+            if (nza >= nxa && nza >= nya) {
+                if (nz <= 0) {
+                    r = rects.front;
+                    fu = (1.0 - px / halfX) * 0.5;
+                    fv = (1.0 - py / halfY) * 0.5;
+                } else {
+                    r = rects.back;
+                    fu = (px / halfX + 1.0) * 0.5;
+                    fv = (1.0 - py / halfY) * 0.5;
+                }
+            } else if (nxa >= nya) {
+                if (nx >= 0) {
+                    r = rects.right;
+                    fu = (1.0 - pz / halfZ) * 0.5;
+                    fv = (1.0 - py / halfY) * 0.5;
+                } else {
+                    r = rects.left;
+                    fu = (pz / halfZ + 1.0) * 0.5;
+                    fv = (1.0 - py / halfY) * 0.5;
+                }
+            } else {
+                if (ny >= 0) {
+                    r = rects.top;
+                    fu = (1.0 - px / halfX) * 0.5;
+                    fv = (pz / halfZ + 1.0) * 0.5;
+                } else {
+                    r = rects.bottom;
+                    fu = (1.0 - px / halfX) * 0.5;
+                    fv = (1.0 - pz / halfZ) * 0.5;
+                }
+            }
+
+            fu = Math.max(0, Math.min(1, fu));
+            fv = Math.max(0, Math.min(1, fv));
+
+            const u = (r.x + fu * r.w) / W;
+            const v = 1.0 - ((r.y + fv * r.h) / H);
+            uvs[i * 2] = u;
+            uvs[i * 2 + 1] = v;
+        }
+
+        nonIndexed.setAttribute('uv', new THREE.BufferAttribute(uvs, 2));
+        nonIndexed.attributes.uv.needsUpdate = true;
+        return nonIndexed;
+    }
+
+    getClothingTextureForPart(part) {
+        if (!part || !part.Parent) return null;
+        const model = this.getCharacterModelAncestor(part);
+        if (!model) return null;
+
+        const shirt = model.GetChildren().find(c => c.ClassName === 'Shirt' && c.ShirtTemplate);
+        const pants = model.GetChildren().find(c => c.ClassName === 'Pants' && c.PantsTemplate);
+        const charMesh = this.getCharacterMeshForPart(part);
+        const name = part.Name;
+
+        let needsShirt = false;
+        let needsPants = false;
+        if (name === 'Torso') {
+            needsShirt = Boolean(shirt);
+            needsPants = Boolean(pants);
+        } else if (name === 'Left Arm' || name === 'Right Arm') {
+            needsShirt = Boolean(shirt);
+        } else if (name === 'Left Leg' || name === 'Right Leg') {
+            needsPants = Boolean(pants);
+        }
+
+        const baseTexVal = charMesh?.BaseTextureId ? String(charMesh.BaseTextureId).trim() : '';
+        const overlayTexVal = charMesh?.OverlayTextureId ? String(charMesh.OverlayTextureId).trim() : '';
+
+        if (!needsShirt && !needsPants && !baseTexVal && !overlayTexVal) return null;
+
+        const shirtVal = needsShirt ? String(shirt.ShirtTemplate).trim() : '';
+        const pantsVal = needsPants ? String(pants.PantsTemplate).trim() : '';
+
+        const colorVal = part.Color || new Color3(1, 1, 1);
+        const rgb = colorVal.toRGB ? colorVal.toRGB() : { r: 160, g: 160, b: 160 };
+        const skinHex = '#' + ((1 << 24) + (rgb.r << 16) + (rgb.g << 8) + rgb.b).toString(16).slice(1);
+
+        if (!this.clothingTextureCache) {
+            this.clothingTextureCache = new Map();
+        }
+
+        const hashStr = (s) => (s && s.length > 50 ? s.slice(0, 20) + '_' + s.length + '_' + s.slice(-20) : (s || ''));
+        const cacheKey = name + '_' + hashStr(shirtVal) + '_' + hashStr(pantsVal) + '_' + hashStr(baseTexVal) + '_' + hashStr(overlayTexVal) + '_' + skinHex;
+        if (this.clothingTextureCache.has(cacheKey)) {
+            return this.clothingTextureCache.get(cacheKey);
+        }
+
+        this.buildClothingTexture(cacheKey, part, name, shirtVal, pantsVal, baseTexVal, overlayTexVal, skinHex);
+        return null;
+    }
+
+    async buildClothingTexture(cacheKey, part, limbName, shirtVal, pantsVal, baseTexVal, overlayTexVal, skinHex) {
+        if (this._clothingLoadingSet?.has(cacheKey)) return;
+        if (!this._clothingLoadingSet) this._clothingLoadingSet = new Set();
+        this._clothingLoadingSet.add(cacheKey);
+
+        const resolveUrl = (val) => {
+            if (!val || val === '0' || val === 'rbxassetid://0') return null;
+            const str = String(val).trim();
+            if (str.startsWith('data:') || str.startsWith('blob:')) return str;
+            if (str.startsWith('/') || str.startsWith('./')) return str;
+            if (str.startsWith('http://') || str.startsWith('https://')) {
+                if (!str.includes('roblox.com') && !str.includes('rbxassetid')) return str;
+            }
+            const assetId = extractRobloxAssetId(str);
+            if (assetId) return '/api/roblox-asset?id=' + encodeURIComponent(assetId);
+            return str;
+        };
+
+        const loadImage = (val) => {
+            const url = resolveUrl(val);
+            if (!url) return Promise.resolve(null);
+            return new Promise((resolve) => {
+                const img = new Image();
+                img.crossOrigin = 'anonymous';
+                img.onload = () => resolve(img);
+                img.onerror = () => {
+                    console.warn('[Clothing] Failed to load texture from:', url);
+                    resolve(null);
+                };
+                img.src = url;
+            });
+        };
+
+        try {
+            const [shirtImg, pantsImg, baseMeshImg, overMeshImg] = await Promise.all([
+                shirtVal ? loadImage(shirtVal) : null,
+                pantsVal ? loadImage(pantsVal) : null,
+                baseTexVal ? loadImage(baseTexVal) : null,
+                overlayTexVal ? loadImage(overlayTexVal) : null
+            ]);
+
+            const canvas = document.createElement('canvas');
+            canvas.width = 585;
+            canvas.height = 559;
+            const ctx = canvas.getContext('2d');
+
+            ctx.fillStyle = skinHex;
+            ctx.fillRect(0, 0, 585, 559);
+
+            if (baseMeshImg) {
+                ctx.drawImage(baseMeshImg, 0, 0, 585, 559);
+            }
+            if (pantsImg) {
+                ctx.drawImage(pantsImg, 0, 0, 585, 559);
+            }
+            if (shirtImg) {
+                ctx.drawImage(shirtImg, 0, 0, 585, 559);
+            }
+            if (overMeshImg) {
+                ctx.drawImage(overMeshImg, 0, 0, 585, 559);
+            }
+
+            const tex = new THREE.CanvasTexture(canvas);
+            tex.colorSpace = THREE.SRGBColorSpace;
+            tex.needsUpdate = true;
+
+            this.clothingTextureCache.set(cacheKey, tex);
+            this._clothingLoadingSet.delete(cacheKey);
+
+            this.rebuildPartMesh(part);
+        } catch (err) {
+            console.warn('[Clothing] Failed to build clothing texture:', err);
+            this._clothingLoadingSet.delete(cacheKey);
+        }
+    }
+
+        handleCharacterChildChange(modelOrInst) {
+        if (!modelOrInst) return;
+        let model = modelOrInst;
+        if (model.ClassName !== 'Model') {
+            model = this.getCharacterModelAncestor(modelOrInst) || modelOrInst.Parent;
+        }
+        if (!model || !model.GetDescendants) return;
+        if (this.clothingTextureCache) {
+            this.clothingTextureCache.clear();
+        }
+        for (const child of model.GetDescendants()) {
+            if (child.IsA && child.IsA('BasePart')) {
+                this.rebuildPartMesh(child);
+            }
+        }
+    }
+
     createGeometryForPart(part) {
         // Safe check so 'undefined.x' NEVER throws!
         const s = (part && part.Size) ? part.Size : new Vector3(4, 1, 2);
@@ -2207,27 +2717,67 @@ export class Viewport {
         const sy = Math.max(0.05, Number(s.y) || 1);
         const sz = Math.max(0.05, Number(s.z) || 2);
 
+        const charMesh = this.getCharacterMeshForPart(part);
+        if (charMesh) {
+            const hasCustomMesh = Boolean(charMesh.MeshData && charMesh.MeshData.positions && charMesh.MeshData.positions.length > 0);
+            if (hasCustomMesh) {
+                let geometry = createBufferGeometryFromMeshData(charMesh.MeshData);
+                const defSize = part.Name === 'Torso' ? { x: 2, y: 2, z: 1 } : { x: 1, y: 2, z: 1 };
+                geometry.scale(sx / defSize.x, sy / defSize.y, sz / defSize.z);
+                if (this.partHasClothing(part)) {
+                    geometry = this.applyClothingUVMappingToGeometry(geometry, part.Name);
+                }
+                return geometry;
+            } else if (charMesh.MeshId) {
+                this.ensureCharacterMeshLoaded(charMesh, part);
+            }
+        }
+
         const specialMesh = part?.FindFirstChildOfClass?.('SpecialMesh');
         if (specialMesh) {
-            const meshType = specialMesh.MeshType;
-            let geometry;
-            if (meshType === 'Head') {
-                geometry = this.createRoundedBoxGeometry(
-                    HEAD_MESH_OBJ_SIZE.x * Math.abs(specialMesh.Scale.x) / HEAD_MESH_DEFAULT_SCALE,
-                    HEAD_MESH_OBJ_SIZE.y * Math.abs(specialMesh.Scale.y) / HEAD_MESH_DEFAULT_SCALE,
-                    HEAD_MESH_OBJ_SIZE.z * Math.abs(specialMesh.Scale.z) / HEAD_MESH_DEFAULT_SCALE
-                );
-            } else if (meshType === 'Sphere') {
-                geometry = new THREE.SphereGeometry(0.5, 32, 24);
-            } else if (meshType === 'Cylinder') {
-                geometry = new THREE.CylinderGeometry(0.5, 0.5, 1, 28);
-            } else {
-                geometry = new THREE.BoxGeometry(1, 1, 1);
-            }
-
+            const meshType = specialMesh.MeshType || 'Head';
             const scale = specialMesh.Scale || Vector3.one;
             const offset = specialMesh.Offset || Vector3.zero;
-            if (meshType !== 'Head') geometry.scale(sx * scale.x, sy * scale.y, sz * scale.z);
+            let geometry = null;
+
+            const hasCustomMesh = Boolean(specialMesh.MeshData && specialMesh.MeshData.positions && specialMesh.MeshData.positions.length > 0);
+            const hasMeshId = Boolean(specialMesh.MeshId && String(specialMesh.MeshId).trim());
+
+            // If custom mesh data exists or MeshId is specified, always render as FileMesh!
+            if (meshType === 'FileMesh' || hasCustomMesh || hasMeshId) {
+                if (hasCustomMesh) {
+                    geometry = createBufferGeometryFromMeshData(specialMesh.MeshData);
+                    const scX = (scale && typeof scale.x === 'number' && !isNaN(scale.x)) ? scale.x : 1;
+                    const scY = (scale && typeof scale.y === 'number' && !isNaN(scale.y)) ? scale.y : 1;
+                    const scZ = (scale && typeof scale.z === 'number' && !isNaN(scale.z)) ? scale.z : 1;
+                    geometry.scale(scX, scY, scZ);
+                } else {
+                    if (hasMeshId) {
+                        this.ensureSpecialMeshLoaded(specialMesh, part);
+                    }
+                    geometry = new THREE.BoxGeometry(1, 1, 1);
+                    geometry.scale(sx * Math.abs(scale.x || 1), sy * Math.abs(scale.y || 1), sz * Math.abs(scale.z || 1));
+                }
+            } else if (meshType === 'Head') {
+                if (!cachedHeadMeshData) {
+                    this.ensureHeadMeshLoaded(part);
+                }
+                geometry = this.createHeadGeometry(scale);
+            } else if (meshType === 'Sphere') {
+                geometry = new THREE.SphereGeometry(0.5, 32, 24);
+                geometry.scale(sx * scale.x, sy * scale.y, sz * scale.z);
+            } else if (meshType === 'Cylinder') {
+                geometry = new THREE.CylinderGeometry(0.5, 0.5, 1, 28);
+                geometry.scale(sx * scale.x, sy * scale.y, sz * scale.z);
+            } else if (meshType === 'Wedge') {
+                geometry = this.createWedgeGeometry(sx * scale.x, sy * scale.y, sz * scale.z);
+            } else if (meshType === 'Torso') {
+                geometry = this.createRoundedBoxGeometry(sx * scale.x, sy * scale.y, sz * scale.z, 0.08);
+            } else {
+                geometry = new THREE.BoxGeometry(1, 1, 1);
+                geometry.scale(sx * scale.x, sy * scale.y, sz * scale.z);
+            }
+
             geometry.translate(offset.x, offset.y, offset.z);
             return geometry;
         }
@@ -2255,40 +2805,15 @@ export class Viewport {
             }
             return geo;
         } else if (part.Shape === 'Wedge') {
-            const geo = new THREE.BufferGeometry();
-            const hx = sx / 2, hy = sy / 2, hz = sz / 2;
-            const vertices = new Float32Array([
-                // Front triangle
-                -hx, -hy,  hz,    hx, -hy,  hz,   -hx,  hy,  hz,
-                // Back triangle
-                -hx, -hy, -hz,   -hx,  hy, -hz,    hx, -hy, -hz,
-                // Bottom quad
-                -hx, -hy, -hz,    hx, -hy, -hz,    hx, -hy,  hz,
-                -hx, -hy, -hz,    hx, -hy,  hz,   -hx, -hy,  hz,
-                // Sloped quad
-                -hx,  hy,  hz,    hx, -hy,  hz,    hx, -hy, -hz,
-                -hx,  hy,  hz,    hx, -hy, -hz,   -hx,  hy, -hz,
-                // Vertical back quad
-                -hx, -hy,  hz,   -hx,  hy,  hz,   -hx,  hy, -hz,
-                -hx, -hy,  hz,   -hx,  hy, -hz,   -hx, -hy, -hz,
-            ]);
-            geo.setAttribute('position', new THREE.BufferAttribute(vertices, 3));
-            geo.computeVertexNormals();
-            const uvs = new Float32Array(vertices.length / 3 * 2);
-            for (let i = 0; i < vertices.length; i += 3) {
-                const vx = vertices[i];
-                const vy = vertices[i + 1];
-                const vz = vertices[i + 2];
-                const uvIdx = (i / 3) * 2;
-                uvs[uvIdx] = (vx + vz);
-                uvs[uvIdx + 1] = vy;
-            }
-            geo.setAttribute('uv', new THREE.BufferAttribute(uvs, 2));
-            return geo;
+            return this.createWedgeGeometry(sx, sy, sz);
         }
 
         if (part.Shape === 'Block' && HUMANOID_ROUNDED_PARTS.has(part.Name) && hasHumanoidModelAncestor(part)) {
-            return this.createRoundedBoxGeometry(sx, sy, sz, 0.05);
+            let geometry = this.createRoundedBoxGeometry(sx, sy, sz, 0.05);
+            if (this.partHasClothing(part)) {
+                geometry = this.applyClothingUVMappingToGeometry(geometry, part.Name, sx, sy, sz);
+            }
+            return geometry;
         }
 
         // Default Block: 1:1 studs UV mapping per face to prevent any stretching
@@ -2339,6 +2864,45 @@ export class Viewport {
         return geo;
     }
 
+    createHeadGeometry(scale = null) {
+        const s = scale || Vector3.one;
+        if (cachedHeadMeshData) {
+            const geo = createBufferGeometryFromMeshData(cachedHeadMeshData);
+            if (geo) {
+                geo.center();
+                const scX = (typeof s.x === 'number' && !isNaN(s.x) ? s.x : 1) / HEAD_MESH_DEFAULT_SCALE;
+                const scY = (typeof s.y === 'number' && !isNaN(s.y) ? s.y : 1) / HEAD_MESH_DEFAULT_SCALE;
+                const scZ = (typeof s.z === 'number' && !isNaN(s.z) ? s.z : 1) / HEAD_MESH_DEFAULT_SCALE;
+                geo.scale(Math.abs(scX), Math.abs(scY), Math.abs(scZ));
+                return geo;
+            }
+        }
+        return this.createRoundedBoxGeometry(
+            HEAD_MESH_OBJ_SIZE.x * Math.abs(s.x || 1) / HEAD_MESH_DEFAULT_SCALE,
+            HEAD_MESH_OBJ_SIZE.y * Math.abs(s.y || 1) / HEAD_MESH_DEFAULT_SCALE,
+            HEAD_MESH_OBJ_SIZE.z * Math.abs(s.z || 1) / HEAD_MESH_DEFAULT_SCALE
+        );
+    }
+
+    async ensureHeadMeshLoaded(part) {
+        if (!this._pendingHeadParts) this._pendingHeadParts = new Set();
+        if (part) this._pendingHeadParts.add(part);
+
+        try {
+            const data = await fetchHeadMeshData();
+            if (data && this._pendingHeadParts.size > 0) {
+                for (const p of this._pendingHeadParts) {
+                    this.rebuildPartMesh(p);
+                    const m = this.partMeshes.get(p);
+                    if (m) this.syncDecalOverlays(p, m);
+                }
+                this._pendingHeadParts.clear();
+            }
+        } catch (err) {
+            console.warn('[Viewport] Error in ensureHeadMeshLoaded:', err);
+        }
+    }
+
     createRoundedBoxGeometry(width, height, depth, radiusFactor = 0.25) {
         const radius = Math.min(width, height, depth) * radiusFactor;
         const shape = new THREE.Shape();
@@ -2382,7 +2946,62 @@ export class Viewport {
             normals[index * 3 + 2] = normal[2] / length;
         }
         geometry.setAttribute('normal', new THREE.Float32BufferAttribute(normals, 3));
+        if (geometry.attributes.uv) {
+            const uvs = geometry.attributes.uv.array;
+            const w = Math.max(0.001, width);
+            const h = Math.max(0.001, height);
+            for (let i = 0; i < uvs.length; i += 2) {
+                uvs[i] = (uvs[i] + width / 2) / w;
+                uvs[i + 1] = (uvs[i + 1] + height / 2) / h;
+            }
+            geometry.attributes.uv.needsUpdate = true;
+        }
         return geometry;
+    }
+
+    rebuildPartMesh(part) {
+        if (!part || !part.IsA || !part.IsA('BasePart')) return;
+        const mesh = this.partMeshes.get(part);
+        if (!mesh) {
+            this.syncPartMesh(part);
+            return;
+        }
+
+        if (mesh.geometry) {
+            mesh.geometry.dispose();
+        }
+        mesh.geometry = this.createGeometryForPart(part);
+        this.disposeMaterial(mesh.material);
+        mesh.material = this.getMaterialForPart(part);
+        this.syncDecalOverlays(part, mesh);
+
+        // Manage HeadTopStud: remove it if SpecialMesh exists, add it if Head has no SpecialMesh
+        const topStud = mesh.getObjectByName('HeadTopStud');
+        const hasSpecialMesh = Boolean(part.FindFirstChildOfClass?.('SpecialMesh'));
+        if (hasSpecialMesh) {
+            if (topStud) mesh.remove(topStud);
+        } else if (part.Name === 'Head' && !topStud) {
+            const studGeo = new THREE.CylinderGeometry(0.38, 0.38, 0.22, 24);
+            const studMat = new THREE.MeshStandardMaterial({
+                color: 0xf5cd2f,
+                roughness: 0.35,
+                metalness: 0.05
+            });
+            const studMesh = new THREE.Mesh(studGeo, studMat);
+            studMesh.name = 'HeadTopStud';
+            const sy = part.Size ? Number(part.Size.y) || 1.25 : 1.25;
+            studMesh.position.set(0, (sy / 2) + 0.11, 0);
+            studMesh.castShadow = true;
+            studMesh.receiveShadow = true;
+            mesh.add(studMesh);
+        }
+
+        if (this.selectedPart === part && !this.isBatchTransformSync) {
+            this.updateSelectionBox();
+        }
+        if (window.conbloxStudio?.gizmoManager?.targetPart === part) {
+            window.conbloxStudio.gizmoManager.update();
+        }
     }
 
     syncPartMesh(part) {
@@ -2437,12 +3056,9 @@ export class Viewport {
                     this.syncDecalOverlays(part, mesh);
                 } else if (child.ClassName === 'SpecialMesh') {
                     child.Changed?.Connect(() => {
-                        mesh.geometry.dispose();
-                        mesh.geometry = this.createGeometryForPart(part);
-                        this.syncDecalOverlays(part, mesh);
+                        this.rebuildPartMesh(part);
                     });
-                    mesh.geometry.dispose();
-                    mesh.geometry = this.createGeometryForPart(part);
+                    this.rebuildPartMesh(part);
                 } else if (LIGHT_CLASSES.has(child.ClassName)) {
                     this.syncPointLight(child);
                 }
@@ -2451,8 +3067,7 @@ export class Viewport {
                 if (child.ClassName === 'Decal' || child.ClassName === 'Texture') {
                     this.syncDecalOverlays(part, mesh);
                 } else if (child.ClassName === 'SpecialMesh') {
-                    mesh.geometry.dispose();
-                    mesh.geometry = this.createGeometryForPart(part);
+                    this.rebuildPartMesh(part);
                 }
             });
 
@@ -2466,14 +3081,35 @@ export class Viewport {
                         });
                     } else if (child.ClassName === 'SpecialMesh') {
                         child.Changed?.Connect(() => {
-                            mesh.geometry.dispose();
-                            mesh.geometry = this.createGeometryForPart(part);
-                            this.syncDecalOverlays(part, mesh);
+                            this.rebuildPartMesh(part);
                         });
                     }
                 }
             }
             this.syncDecalOverlays(part, mesh);
+
+            const charModel = this.getCharacterModelAncestor(part);
+            if (charModel && !charModel._clothingListening) {
+                charModel._clothingListening = true;
+                charModel.ChildAdded?.Connect((c) => {
+                    if (c.ClassName === 'CharacterMesh' || c.ClassName === 'Shirt' || c.ClassName === 'Pants') {
+                        c.Changed?.Connect(() => this.handleCharacterChildChange(charModel));
+                        this.handleCharacterChildChange(charModel);
+                    }
+                });
+                charModel.ChildRemoved?.Connect((c) => {
+                    if (c.ClassName === 'CharacterMesh' || c.ClassName === 'Shirt' || c.ClassName === 'Pants') {
+                        this.handleCharacterChildChange(charModel);
+                    }
+                });
+                if (charModel.GetChildren) {
+                    for (const c of charModel.GetChildren()) {
+                        if (c.ClassName === 'CharacterMesh' || c.ClassName === 'Shirt' || c.ClassName === 'Pants') {
+                            c.Changed?.Connect(() => this.handleCharacterChildChange(charModel));
+                        }
+                    }
+                }
+            }
         }
 
         // Update transforms
@@ -2505,6 +3141,29 @@ export class Viewport {
             mesh.geometry.dispose();
             mesh.geometry = this.createGeometryForPart(part);
             this.syncDecalOverlays(part, mesh);
+
+            const charModel = this.getCharacterModelAncestor(part);
+            if (charModel && !charModel._clothingListening) {
+                charModel._clothingListening = true;
+                charModel.ChildAdded?.Connect((c) => {
+                    if (c.ClassName === 'CharacterMesh' || c.ClassName === 'Shirt' || c.ClassName === 'Pants') {
+                        c.Changed?.Connect(() => this.handleCharacterChildChange(charModel));
+                        this.handleCharacterChildChange(charModel);
+                    }
+                });
+                charModel.ChildRemoved?.Connect((c) => {
+                    if (c.ClassName === 'CharacterMesh' || c.ClassName === 'Shirt' || c.ClassName === 'Pants') {
+                        this.handleCharacterChildChange(charModel);
+                    }
+                });
+                if (charModel.GetChildren) {
+                    for (const c of charModel.GetChildren()) {
+                        if (c.ClassName === 'CharacterMesh' || c.ClassName === 'Shirt' || c.ClassName === 'Pants') {
+                            c.Changed?.Connect(() => this.handleCharacterChildChange(charModel));
+                        }
+                    }
+                }
+            }
         } else if (prop === 'Color' || prop === 'Material' || prop === 'Transparency') {
             this.disposeMaterial(mesh.material);
             mesh.material = this.getMaterialForPart(part);
@@ -4569,5 +5228,184 @@ export class Viewport {
         }
         this.renderer.setPixelRatio(pr);
         this.onResize();
+    }
+
+    async ensureSpecialMeshLoaded(specialMesh, part) {
+        if (!specialMesh || !specialMesh.MeshId) return;
+        const assetId = extractRobloxAssetId(specialMesh.MeshId);
+        if (!assetId) return;
+
+        if (!this._loadingMeshes) this._loadingMeshes = new Set();
+        if (this._loadingMeshes.has(assetId)) return;
+        this._loadingMeshes.add(assetId);
+
+        try {
+            const data = await fetchRobloxMeshData(assetId);
+            if (data && data.geometry) {
+                specialMesh.MeshData = data.geometry;
+                if (specialMesh.MeshType !== 'FileMesh') {
+                    specialMesh.MeshType = 'FileMesh';
+                }
+                if (part) {
+                    this.rebuildPartMesh(part);
+                }
+            }
+        } catch (err) {
+            console.warn(`[Viewport] Failed to auto-load mesh ${assetId}:`, err);
+        } finally {
+            this._loadingMeshes.delete(assetId);
+        }
+    }
+
+    getSpecialMeshTexture(texVal, part) {
+        if (!texVal) return null;
+        if (!this.specialMeshTextureLoader) this.specialMeshTextureLoader = new THREE.TextureLoader();
+        if (!this.specialMeshTextureCache) this.specialMeshTextureCache = new Map();
+        if (!this._specialMeshRawImages) this._specialMeshRawImages = new Map();
+
+        let rgb = { r: 255, g: 255, b: 255 };
+        if (part) {
+            if (part.Color && typeof part.Color.toRGB === 'function') {
+                rgb = part.Color.toRGB();
+            } else if (part.Color && typeof part.Color.r === 'number') {
+                rgb = {
+                    r: Math.round(part.Color.r * (part.Color.r <= 1 ? 255 : 1)),
+                    g: Math.round(part.Color.g * (part.Color.g <= 1 ? 255 : 1)),
+                    b: Math.round(part.Color.b * (part.Color.b <= 1 ? 255 : 1))
+                };
+            }
+        }
+
+        const cacheKey = String(texVal) + '__' + rgb.r + '_' + rgb.g + '_' + rgb.b;
+
+        const configureTexture = (tex) => {
+            if (!tex) return;
+            tex.wrapS = THREE.RepeatWrapping;
+            tex.wrapT = THREE.RepeatWrapping;
+            tex.repeat.set(1, 1);
+            tex.offset.set(0, 0);
+            if (typeof THREE.SRGBColorSpace !== 'undefined') {
+                tex.colorSpace = THREE.SRGBColorSpace;
+            } else if (typeof THREE.sRGBEncoding !== 'undefined') {
+                tex.encoding = THREE.sRGBEncoding;
+            }
+            tex.generateMipmaps = true;
+            tex.minFilter = THREE.LinearMipmapLinearFilter;
+            tex.magFilter = THREE.LinearFilter;
+            if (this.renderer && this.renderer.capabilities) {
+                const maxAniso = this.renderer.capabilities.getMaxAnisotropy();
+                if (maxAniso > 1) {
+                    tex.anisotropy = Math.min(16, maxAniso);
+                }
+            }
+            tex.needsUpdate = true;
+        };
+
+        if (this.specialMeshTextureCache.has(cacheKey)) {
+            const cached = this.specialMeshTextureCache.get(cacheKey);
+            configureTexture(cached);
+            return cached;
+        }
+
+        const processImageWithColor = (rawImg, colorRgb) => {
+            if (!rawImg) return null;
+            const w = rawImg.naturalWidth || rawImg.width || 0;
+            const h = rawImg.naturalHeight || rawImg.height || 0;
+            if (!w || !h) return null;
+
+            try {
+                const testCanvas = document.createElement('canvas');
+                testCanvas.width = w;
+                testCanvas.height = h;
+                const testCtx = testCanvas.getContext('2d', { willReadFrequently: true });
+                testCtx.drawImage(rawImg, 0, 0);
+                const imgData = testCtx.getImageData(0, 0, w, h);
+                const data = imgData.data;
+
+                let hasAlpha = false;
+                for (let i = 3; i < data.length; i += 4) {
+                    if (data[i] < 250) {
+                        hasAlpha = true;
+                        break;
+                    }
+                }
+
+                if (hasAlpha) {
+                    const canvas = document.createElement('canvas');
+                    canvas.width = w;
+                    canvas.height = h;
+                    const ctx = canvas.getContext('2d');
+                    ctx.fillStyle = 'rgb(' + colorRgb.r + ', ' + colorRgb.g + ', ' + colorRgb.b + ')';
+                    ctx.fillRect(0, 0, w, h);
+                    ctx.drawImage(rawImg, 0, 0);
+                    return canvas;
+                }
+            } catch (err) {
+                console.warn('[Viewport] Failed to process special mesh texture alpha:', err);
+            }
+            return null;
+        };
+
+        if (this._specialMeshRawImages.has(texVal)) {
+            const rawImg = this._specialMeshRawImages.get(texVal);
+            const canvas = processImageWithColor(rawImg, rgb);
+            const tex = canvas ? new THREE.CanvasTexture(canvas) : this.specialMeshTextureLoader.load(texVal);
+            configureTexture(tex);
+            this.specialMeshTextureCache.set(cacheKey, tex);
+            return tex;
+        }
+
+        const assetId = extractRobloxAssetId(texVal);
+        let loadUrl = texVal;
+        if (assetId && !texVal.startsWith('data:') && !texVal.startsWith('/')) {
+            loadUrl = '/api/roblox-asset?id=' + encodeURIComponent(assetId);
+        }
+
+        const texture = this.specialMeshTextureLoader.load(loadUrl, (t) => {
+            if (t.image) {
+                this._specialMeshRawImages.set(texVal, t.image);
+                const canvas = processImageWithColor(t.image, rgb);
+                if (canvas) {
+                    const canvasTex = new THREE.CanvasTexture(canvas);
+                    configureTexture(canvasTex);
+                    this.specialMeshTextureCache.set(cacheKey, canvasTex);
+                    if (part) {
+                        const mesh = this.partMeshes.get(part);
+                        if (mesh && mesh.material) {
+                            if (Array.isArray(mesh.material)) {
+                                mesh.material.forEach(m => {
+                                    m.map = canvasTex;
+                                    m.needsUpdate = true;
+                                });
+                            } else {
+                                mesh.material.map = canvasTex;
+                                mesh.material.needsUpdate = true;
+                            }
+                        }
+                    }
+                    return;
+                }
+            }
+            configureTexture(t);
+            t.needsUpdate = true;
+            if (part) {
+                const mesh = this.partMeshes.get(part);
+                if (mesh && mesh.material) {
+                    if (Array.isArray(mesh.material)) {
+                        mesh.material.forEach(m => {
+                            m.map = t;
+                            m.needsUpdate = true;
+                        });
+                    } else {
+                        mesh.material.map = t;
+                        mesh.material.needsUpdate = true;
+                    }
+                }
+            }
+        });
+
+        configureTexture(texture);
+        this.specialMeshTextureCache.set(cacheKey, texture);
+        return texture;
     }
 }

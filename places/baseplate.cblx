@@ -1,7 +1,7 @@
 {
   "version": "1.0.0",
   "name": "baseplate.cblx",
-  "timestamp": "2026-10-29T11:00:12.477Z",
+  "timestamp": "2026-10-31T09:00:57.841Z",
   "dataModel": {
     "id": "inst_1_0povau",
     "name": "game",
@@ -21,7 +21,7 @@
         "properties": {},
         "children": [
           {
-            "id": "inst_69_zu4yro",
+            "id": "inst_69_qq178r",
             "name": "Terrain",
             "className": "Terrain",
             "archivable": true,
@@ -52,7 +52,7 @@
             ]
           },
           {
-            "id": "inst_70_p77av6",
+            "id": "inst_70_kq8vpr",
             "name": "Camera",
             "className": "Camera",
             "archivable": true,
@@ -61,13 +61,13 @@
             "properties": {
               "cframe": {
                 "position": {
-                  "x": 0,
-                  "y": 15,
-                  "z": 30
+                  "x": -1.9185694710223942,
+                  "y": 14.935206565016616,
+                  "z": 22.672172820351054
                 },
                 "orientation": {
-                  "x": -20.397297506657306,
-                  "y": 3.7815214478634336,
+                  "x": -29.67921378777665,
+                  "y": -7.39115555718763,
                   "z": 0
                 }
               },
@@ -85,8 +85,8 @@
               },
               "fieldOfView": 70,
               "cameraType": "Custom",
-              "cameraSubjectId": "inst_218_xat4oe",
-              "cameraSubjectName": "Humanoid",
+              "cameraSubjectId": null,
+              "cameraSubjectName": null,
               "headLocked": true
             },
             "children": []
@@ -127,9 +127,9 @@
                 "z": 0
               },
               "color": {
-                "r": 0.6392156862745098,
-                "g": 0.6352941176470588,
-                "b": 0.6470588235294118
+                "r": 0.1411764705882353,
+                "g": 0.1411764705882353,
+                "b": 0.1411764705882353
               },
               "material": "Plastic",
               "transparency": 0,
@@ -153,9 +153,9 @@
                   "face": "Top",
                   "transparency": 0.8,
                   "color": {
-                    "r": 1,
-                    "g": 1,
-                    "b": 1
+                    "r": 0,
+                    "g": 0,
+                    "b": 0
                   },
                   "studsPerTileU": 8,
                   "studsPerTileV": 8

@@ -1720,6 +1720,10 @@ body.game-player .viewport-3d {
     backdrop-filter: blur(4px);
 }
 
+.backpack-bar:empty {
+    display: none !important;
+}
+
 .backpack-bar[hidden] {
     display: none;
 }
@@ -2068,6 +2072,62 @@ body.game-player .viewport-3d {
     width: 14px;
     height: 14px;
     color: var(--accent-blue);
+}
+
+.topbar-user-btn {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 2px 8px;
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    color: var(--text-primary);
+    border-radius: 12px;
+    cursor: pointer;
+    font-size: 11px;
+    font-weight: 500;
+    transition: all 0.15s ease;
+    user-select: none;
+    margin-right: 8px;
+}
+
+.topbar-user-btn:hover {
+    background: rgba(255, 255, 255, 0.08);
+    border-color: rgba(255, 255, 255, 0.2);
+}
+
+.topbar-user-btn svg {
+    width: 13px;
+    height: 13px;
+    color: #00e5ff;
+}
+
+.topbar-user-btn.logged-in {
+    background: rgba(0, 229, 255, 0.08);
+    border-color: rgba(0, 229, 255, 0.3);
+}
+
+.topbar-user-btn.logged-in:hover {
+    background: rgba(0, 229, 255, 0.15);
+    border-color: #00e5ff;
+}
+
+.topbar-user-avatar {
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    object-fit: cover;
+    background: #111;
+}
+
+.topbar-username {
+    font-size: 11px;
+    font-weight: 600;
+    color: #e2e8f0;
+    max-width: 120px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 /* ==========================================================================

@@ -3,10 +3,13 @@
  * Replicates Roblox Studio Explorer hierarchy, search, hover '+' Insert Object popup, and context menu
  */
 
+import { Instance } from '../engine/Instance.js';
 import { Part, SpawnLocation } from '../engine/BasePart.js';
-import { Model, Folder, Tool, Script, LocalScript, PointLight, SpotLight, SurfaceLight, Humanoid, BloomEffect, Atmosphere, DepthOfFieldEffect, SunRaysEffect, Sky, SkyBox, Clouds, Decal, Texture, Sound, Weld, WeldConstraint, WeldConstant, Motor6D, Keyframe, KeyframeSequence } from '../engine/OtherInstances.js';
+import { Model, Folder, Tool, Script, LocalScript, ModuleScript, PointLight, SpotLight, SurfaceLight, Humanoid, BloomEffect, Atmosphere, DepthOfFieldEffect, SunRaysEffect, Sky, SkyBox, Clouds, Decal, Texture, Sound, Weld, WeldConstraint, WeldConstant, Motor6D, Keyframe, KeyframeSequence, SpecialMesh, CharacterMesh, Shirt, Pants } from '../engine/OtherInstances.js';
 import { TemplateManager } from './TemplateManager.js';
 import { Vector3, Color3 } from '../engine/Math3D.js';
+
+const EXPLORER_HIDDEN_CLASSES = new Set(['Keyframe', 'Pose']);
 
 export class ExplorerUI {
     constructor(containerEl, dataModel, onSelect, onOpenScript) {
@@ -60,7 +63,10 @@ export class ExplorerUI {
         this.container.querySelector('#explorer-collapse-all').addEventListener('click', () => {
             const all = this.dataModel.GetDescendants();
             for (const item of all) {
-                if (item.GetChildren().length > 0) this.collapsedNodes.add(item.id);
+                if (EXPLORER_HIDDEN_CLASSES.has(item.ClassName)) continue;
+                if (item.GetChildren().some(c => !EXPLORER_HIDDEN_CLASSES.has(c.ClassName))) {
+                    this.collapsedNodes.add(item.id);
+                }
             }
             this.render();
         });
@@ -96,6 +102,21 @@ export class ExplorerUI {
             this._dmDescendantAddedConn.Disconnect();
         }
 
+        // Initialize collapsed states: collapse all services except Workspace, and collapse containers inside Workspace
+        this.collapsedNodes = new Set();
+        for (const service of dm.GetChildren()) {
+            if (service.Name !== 'Workspace') {
+                this.collapsedNodes.add(service.id);
+            }
+        }
+        if (dm.Workspace) {
+            for (const child of dm.Workspace.GetChildren()) {
+                if (child.GetChildren().some(c => !EXPLORER_HIDDEN_CLASSES.has(c.ClassName))) {
+                    this.collapsedNodes.add(child.id);
+                }
+            }
+        }
+
         if (dm.DescendantRemoved) {
             this._dmDescendantRemovedConn = dm.DescendantRemoved.Connect((descendant) => {
                 if (descendant) {
@@ -104,13 +125,15 @@ export class ExplorerUI {
                         this.selectedInstance = this.selectedInstances.size > 0 ? Array.from(this.selectedInstances)[0] : null;
                     }
                 }
-                this.render();
+                this.requestRender();
             });
         }
         if (dm.DescendantAdded) {
             this._dmDescendantAddedConn = dm.DescendantAdded.Connect((descendant) => {
+                if (EXPLORER_HIDDEN_CLASSES.has(descendant.ClassName)) return;
                 for (const addedInstance of [descendant, ...descendant.GetDescendants()]) {
-                    if (addedInstance.GetChildren().length > 0) {
+                    if (EXPLORER_HIDDEN_CLASSES.has(addedInstance.ClassName)) continue;
+                    if (addedInstance.GetChildren().some(c => !EXPLORER_HIDDEN_CLASSES.has(c.ClassName))) {
                         this.collapsedNodes.add(addedInstance.id);
                     }
                 }
@@ -119,10 +142,19 @@ export class ExplorerUI {
                         if (prop === 'Name') this.requestRender();
                     });
                 }
-                this.render();
+                this.requestRender();
             });
         }
-        this.bindDataModelEvents(dm);
+
+        for (const descendant of dm.GetDescendants()) {
+            if (EXPLORER_HIDDEN_CLASSES.has(descendant.ClassName)) continue;
+            if (descendant && descendant.Changed) {
+                descendant.Changed.Connect((prop) => {
+                    if (prop === 'Name') this.requestRender();
+                });
+            }
+        }
+
         this.render();
     }
 
@@ -132,17 +164,6 @@ export class ExplorerUI {
             this._renderTimeout = null;
             this.render();
         }, 16);
-    }
-
-    bindDataModelEvents(node) {
-        node.ChildAdded.Connect(() => this.render());
-        node.ChildRemoved.Connect(() => this.render());
-        node.Changed.Connect((prop) => {
-            if (prop === 'Name') this.render();
-        });
-        for (const child of node.GetChildren()) {
-            this.bindDataModelEvents(child);
-        }
     }
 
     createContextMenu() {
@@ -202,10 +223,15 @@ export class ExplorerUI {
                 { name: 'Part (Wedge)', icon: 'triangle', create: () => this.createPartIn(targetInst, 'Wedge') },
                 { name: 'SpawnLocation', icon: 'map-pin', create: () => this.createSpawnIn(targetInst) },
                 { name: 'Sound', icon: 'volume-2', create: () => this.createSoundIn(targetInst) },
+                { name: 'SpecialMesh', icon: 'box', create: () => this.createSpecialMeshIn(targetInst) },
+                { name: 'CharacterMesh', icon: 'user', create: () => this.createCharacterMeshIn(targetInst) },
+                { name: 'Shirt', icon: 'shirt', create: () => this.createShirtIn(targetInst) },
+                { name: 'Pants', icon: 'layers', create: () => this.createPantsIn(targetInst) },
                 { name: 'Decal', icon: 'image', create: () => this.createDecalIn(targetInst) },
                 { name: 'Texture', icon: 'grid', create: () => this.createTextureIn(targetInst) },
                 { name: 'Script', icon: 'file-code', create: () => this.createScriptIn(targetInst) },
                 { name: 'LocalScript', icon: 'file-terminal', create: () => this.createLocalScriptIn(targetInst) },
+                { name: 'ModuleScript', icon: 'file-cog', create: () => this.createModuleScriptIn(targetInst) },
                 { name: 'PointLight', icon: 'lightbulb', create: () => this.createLightIn(targetInst) },
                 { name: 'SpotLight', icon: 'flashlight', create: () => this.createSpotLightIn(targetInst) },
                 { name: 'SurfaceLight', icon: 'sun', create: () => this.createSurfaceLightIn(targetInst) },
@@ -317,6 +343,17 @@ export class ExplorerUI {
         const s = new LocalScript();
         s.Parent = parent;
         this.expandNode(parent);
+        this.setSelected(s);
+        if (this.onSelect) this.onSelect(s);
+        if (this.onOpenScript) this.onOpenScript(s);
+        window.conbloxStudio?.historyManager?.recordState();
+        return s;
+    }
+
+    createModuleScriptIn(parent) {
+        const s = new ModuleScript();
+        s.Parent = parent || this.dataModel.ReplicatedStorage || this.dataModel.Workspace;
+        this.expandNode(s.Parent);
         this.setSelected(s);
         if (this.onSelect) this.onSelect(s);
         if (this.onOpenScript) this.onOpenScript(s);
@@ -528,6 +565,88 @@ export class ExplorerUI {
         return c;
     }
 
+    createSpecialMeshIn(parent) {
+        if (window.conbloxStudio?.createSpecialMesh) {
+            return window.conbloxStudio.createSpecialMesh(parent);
+        }
+
+        let targetPart = null;
+        if (parent && parent.IsA && parent.IsA('BasePart')) {
+            targetPart = parent;
+        } else if (this.selectedInstance && this.selectedInstance.IsA && this.selectedInstance.IsA('BasePart')) {
+            targetPart = this.selectedInstance;
+        } else {
+            // SpecialMesh must be inside a BasePart. Create a Part to host it if not inside one!
+            targetPart = new Part();
+            targetPart.Name = 'Part';
+            targetPart.Parent = parent || this._dataModel?.Workspace;
+            if (window.conbloxStudio?.viewport) {
+                window.conbloxStudio.viewport.syncPartMesh(targetPart);
+            }
+        }
+
+        const sm = new SpecialMesh();
+        sm.Name = 'Mesh';
+        sm.MeshType = 'Head';
+        sm.Parent = targetPart;
+
+        if (parent && parent !== targetPart) {
+            this.expandNode(parent);
+        }
+        this.expandNode(targetPart);
+        this.setSelected(sm);
+        if (this.onSelect) this.onSelect(sm);
+        window.conbloxStudio?.historyManager?.recordState();
+
+        if (window.conbloxStudio?.viewport) {
+            window.conbloxStudio.viewport.rebuildPartMesh(targetPart);
+        }
+        return sm;
+    }
+
+    createCharacterMeshIn(parent) {
+        const cm = new CharacterMesh();
+        cm.Name = 'CharacterMesh';
+        cm.BodyPart = 'Torso';
+        cm.Parent = parent;
+        this.expandNode(parent);
+        this.setSelected(cm);
+        if (this.onSelect) this.onSelect(cm);
+        window.conbloxStudio?.historyManager?.recordState();
+        if (window.conbloxStudio?.viewport) {
+            window.conbloxStudio.viewport.handleCharacterChildChange?.(parent);
+        }
+        return cm;
+    }
+
+    createShirtIn(parent) {
+        const sh = new Shirt();
+        sh.Name = 'Shirt';
+        sh.Parent = parent;
+        this.expandNode(parent);
+        this.setSelected(sh);
+        if (this.onSelect) this.onSelect(sh);
+        window.conbloxStudio?.historyManager?.recordState();
+        if (window.conbloxStudio?.viewport) {
+            window.conbloxStudio.viewport.handleCharacterChildChange?.(parent);
+        }
+        return sh;
+    }
+
+    createPantsIn(parent) {
+        const p = new Pants();
+        p.Name = 'Pants';
+        p.Parent = parent;
+        this.expandNode(parent);
+        this.setSelected(p);
+        if (this.onSelect) this.onSelect(p);
+        window.conbloxStudio?.historyManager?.recordState();
+        if (window.conbloxStudio?.viewport) {
+            window.conbloxStudio.viewport.handleCharacterChildChange?.(parent);
+        }
+        return p;
+    }
+
     createDecalIn(parent) {
         const d = new Decal();
         d.Parent = parent;
@@ -570,8 +689,10 @@ export class ExplorerUI {
     showContextMenu(x, y, targetInst) {
         const isProtected = targetInst === this.dataModel || targetInst.Parent === this.dataModel || targetInst.ClassName === 'Terrain' || targetInst.Name === 'Terrain';
         const hasModelSelected = (this.selectedInstances.size > 0 && Array.from(this.selectedInstances).some(i => i.ClassName === 'Model')) || targetInst.ClassName === 'Model';
+        const isKeyframeSequence = targetInst.ClassName === 'KeyframeSequence';
 
         this.contextMenuEl.innerHTML = `
+            ${isKeyframeSequence ? '<div class="ctx-item" data-action="save-to-server" style="color: #60a5fa; font-weight: 600;"><i data-lucide="cloud-upload"></i> Save to Server</div><div class="ctx-divider"></div>' : ''}
             <div class="ctx-item" data-action="insert-object"><i data-lucide="plus-circle"></i> Insert Object...</div>
             <div class="ctx-divider"></div>
             <div class="ctx-item" data-action="group"><i data-lucide="package"></i> Group (Ctrl+G)</div>
@@ -593,7 +714,9 @@ export class ExplorerUI {
         this.contextMenuEl.querySelectorAll('.ctx-item').forEach(btn => {
             btn.onclick = () => {
                 const action = btn.dataset.action;
-                if (action === 'insert-object') {
+                if (action === 'save-to-server') {
+                    this.showSaveAnimationModal(targetInst);
+                } else if (action === 'insert-object') {
                     this.showInsertPopup(x, y, targetInst);
                 } else if (action === 'group') {
                     window.conbloxStudio?.groupSelected();
@@ -614,6 +737,106 @@ export class ExplorerUI {
                 this.contextMenuEl.style.display = 'none';
             };
         });
+    }
+
+    showSaveAnimationModal(sequence) {
+        const existing = document.getElementById('save-animation-modal-backdrop');
+        if (existing) existing.remove();
+
+        const backdrop = document.createElement('div');
+        backdrop.id = 'save-animation-modal-backdrop';
+        backdrop.className = 'studio-settings-backdrop';
+        backdrop.style.zIndex = '99999';
+
+        backdrop.innerHTML = `
+            <div class="studio-settings-modal" style="width: 520px; height: auto; max-height: 85vh;">
+                <div class="settings-modal-header">
+                    <div class="settings-header-title">
+                        <i data-lucide="cloud-upload" class="settings-header-icon" style="color: #38bdf8;"></i>
+                        <span>Save to Server</span>
+                    </div>
+                    <button class="settings-close-btn" id="save-anim-close-x"><i data-lucide="x"></i></button>
+                </div>
+                <div class="settings-modal-body" style="padding: 20px; display: flex; flex-direction: column; gap: 16px;">
+                    <div style="display: flex; flex-direction: column; gap: 6px;">
+                        <label style="font-size: 12px; font-weight: 600; color: var(--text-primary, #fff);">Animation Name</label>
+                        <input id="save-anim-name" type="text" value="${sequence.Name || 'Animation'}" style="background: var(--bg-darkest, #151820); border: 1px solid var(--border-color, #2a2e39); border-radius: 4px; padding: 8px 10px; color: #fff; font-size: 13px; outline: none;" />
+                    </div>
+                    <div style="display: flex; flex-direction: column; gap: 6px;">
+                        <label style="font-size: 12px; font-weight: 600; color: var(--text-primary, #fff);">Description</label>
+                        <textarea id="save-anim-desc" rows="4" placeholder="Enter animation description..." style="background: var(--bg-darkest, #151820); border: 1px solid var(--border-color, #2a2e39); border-radius: 4px; padding: 8px 10px; color: #fff; font-size: 13px; outline: none; resize: vertical;"></textarea>
+                    </div>
+                    <div id="save-anim-status" style="font-size: 12px; display: none; padding: 10px; border-radius: 4px;"></div>
+                </div>
+                <div class="settings-modal-footer" style="justify-content: flex-end; gap: 10px;">
+                    <button class="settings-btn btn-secondary" id="save-anim-cancel-btn">Cancel</button>
+                    <button class="settings-btn" id="save-anim-save-btn" style="background: var(--accent-blue, #007acc); color: #fff; font-weight: 600;">Save</button>
+                </div>
+            </div>
+        `;
+
+        document.body.appendChild(backdrop);
+        if (window.lucide) window.lucide.createIcons({ root: backdrop });
+
+        const close = () => backdrop.remove();
+        backdrop.querySelector('#save-anim-close-x').onclick = close;
+        backdrop.querySelector('#save-anim-cancel-btn').onclick = close;
+        backdrop.addEventListener('click', (e) => {
+            if (e.target === backdrop) close();
+        });
+
+        const saveBtn = backdrop.querySelector('#save-anim-save-btn');
+        const nameInput = backdrop.querySelector('#save-anim-name');
+        const descInput = backdrop.querySelector('#save-anim-desc');
+        const statusBox = backdrop.querySelector('#save-anim-status');
+
+        saveBtn.onclick = async () => {
+            const name = nameInput.value.trim() || sequence.Name || 'Animation';
+            const description = descInput.value.trim();
+
+            saveBtn.disabled = true;
+            saveBtn.textContent = 'Saving...';
+
+            try {
+                const serialized = sequence.serialize();
+                const resp = await fetch('/api/publish-animation', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name, description, serialized })
+                });
+
+                const data = await resp.json();
+                if (data.success && data.id) {
+                    sequence.Name = name;
+                    statusBox.style.display = 'block';
+                    statusBox.style.background = 'rgba(16, 185, 129, 0.15)';
+                    statusBox.style.border = '1px solid rgba(16, 185, 129, 0.4)';
+                    statusBox.style.color = '#34d399';
+                    statusBox.innerHTML = `
+                        <div style="font-weight: 700; margin-bottom: 4px;">Successfully Published!</div>
+                        <div>Animation ID: <strong style="color: #fff; user-select: all;">${data.id}</strong></div>
+                        <div style="margin-top: 4px; font-size: 11px; color: #a7f3d0;">
+                            Use with: <code style="background: rgba(0,0,0,0.3); padding: 2px 4px; border-radius: 3px; user-select: all;">rbxasset://${data.id}</code>
+                        </div>
+                    `;
+                    saveBtn.textContent = 'Done';
+                    saveBtn.onclick = close;
+                    if (window.conbloxStudio?.outputUI) {
+                        window.conbloxStudio.outputUI.log('info', `[Server] Saved animation "${name}" with ID: ${data.id}. Asset URI: rbxasset://${data.id}`);
+                    }
+                } else {
+                    throw new Error(data.error || 'Failed to save animation');
+                }
+            } catch (err) {
+                statusBox.style.display = 'block';
+                statusBox.style.background = 'rgba(239, 68, 68, 0.15)';
+                statusBox.style.border = '1px solid rgba(239, 68, 68, 0.4)';
+                statusBox.style.color = '#f87171';
+                statusBox.textContent = `Error: ${err.message}`;
+                saveBtn.disabled = false;
+                saveBtn.textContent = 'Save';
+            }
+        };
     }
 
     getIconForClass(className) {
@@ -638,11 +861,16 @@ export class ExplorerUI {
             case 'SoundService': return 'volume-2';
             case 'TextChatService': return 'message-square';
             case 'Part': return 'box';
+            case 'SpecialMesh': return 'box';
+            case 'CharacterMesh': return 'user';
+            case 'Shirt': return 'shirt';
+            case 'Pants': return 'layers';
             case 'SpawnLocation': return 'map-pin';
             case 'Model': return 'package';
             case 'Folder': return 'folder';
             case 'Script': return 'file-code';
             case 'LocalScript': return 'file-terminal';
+            case 'ModuleScript': return 'file-cog';
             case 'PointLight': return 'lightbulb';
             case 'SpotLight': return 'flashlight';
             case 'SurfaceLight': return 'sun';
@@ -676,7 +904,7 @@ export class ExplorerUI {
         ];
 
         const traverse = (inst) => {
-            let children = inst.GetChildren();
+            let children = inst.GetChildren().filter(c => !EXPLORER_HIDDEN_CLASSES.has(c.ClassName));
             if (inst.ClassName === 'DataModel') {
                 const HIDDEN_SERVICES = new Set(['UserInputService', 'RunService']);
                 children = children.filter(c => !HIDDEN_SERVICES.has(c.Name) && !HIDDEN_SERVICES.has(c.ClassName));
@@ -688,10 +916,10 @@ export class ExplorerUI {
             }
             for (const child of children) {
                 const matchesSelf = !this.filterText || child.Name.toLowerCase().includes(this.filterText) || child.ClassName.toLowerCase().includes(this.filterText);
-                const hasMatchingChild = this.filterText && child.GetDescendants().some(d => d.Name.toLowerCase().includes(this.filterText));
+                const hasMatchingChild = this.filterText && child.GetDescendants().some(d => !EXPLORER_HIDDEN_CLASSES.has(d.ClassName) && d.Name.toLowerCase().includes(this.filterText));
                 if (!this.filterText || matchesSelf || hasMatchingChild) {
                     visible.push(child);
-                    const hasChildren = child.GetChildren().length > 0;
+                    const hasChildren = child.GetChildren().some(c => !EXPLORER_HIDDEN_CLASSES.has(c.ClassName));
                     const isCollapsed = this.collapsedNodes.has(child.id);
                     if (hasChildren && (!isCollapsed || this.filterText)) {
                         traverse(child);
@@ -712,7 +940,7 @@ export class ExplorerUI {
     }
 
     renderNode(inst, parentEl, depth) {
-        let children = inst.GetChildren();
+        let children = inst.GetChildren().filter(c => !EXPLORER_HIDDEN_CLASSES.has(c.ClassName));
         if (inst.ClassName === 'DataModel') {
             const HIDDEN_SERVICES = new Set(['UserInputService', 'RunService']);
             children = children.filter(c => !HIDDEN_SERVICES.has(c.Name) && !HIDDEN_SERVICES.has(c.ClassName));
@@ -744,7 +972,7 @@ export class ExplorerUI {
         const isCollapsed = this.collapsedNodes.has(inst.id);
 
         const matchesSelf = !this.filterText || inst.Name.toLowerCase().includes(this.filterText) || inst.ClassName.toLowerCase().includes(this.filterText);
-        const hasMatchingChild = this.filterText && inst.GetDescendants().some(d => d.Name.toLowerCase().includes(this.filterText));
+        const hasMatchingChild = this.filterText && inst.GetDescendants().some(d => !EXPLORER_HIDDEN_CLASSES.has(d.ClassName) && d.Name.toLowerCase().includes(this.filterText));
 
         if (this.filterText && !matchesSelf && !hasMatchingChild) {
             return;
@@ -825,8 +1053,23 @@ export class ExplorerUI {
                 if (inst.IsDescendantOf && inst.IsDescendantOf(item)) continue;
                 if (item.Parent === this.dataModel) continue;
 
+                const oldParent = item.Parent;
                 item.Parent = inst;
                 movedCount++;
+
+                if (window.conbloxStudio?.viewport) {
+                    if (item.ClassName === 'SpecialMesh') {
+                        if (oldParent && oldParent.IsA && oldParent.IsA('BasePart')) {
+                            window.conbloxStudio.viewport.rebuildPartMesh(oldParent);
+                        }
+                        if (inst && inst.IsA && inst.IsA('BasePart')) {
+                            window.conbloxStudio.viewport.rebuildPartMesh(inst);
+                        }
+                    } else if (item.ClassName === 'CharacterMesh' || item.ClassName === 'Shirt' || item.ClassName === 'Pants') {
+                        window.conbloxStudio.viewport.handleCharacterChildChange?.(oldParent);
+                        window.conbloxStudio.viewport.handleCharacterChildChange?.(inst);
+                    }
+                }
             }
 
             if (movedCount > 0) {
@@ -935,7 +1178,7 @@ export class ExplorerUI {
         // Double click: open script
         nodeEl.addEventListener('dblclick', (e) => {
             e.stopPropagation();
-            if ((inst.ClassName === 'Script' || inst.ClassName === 'LocalScript') && this.onOpenScript) {
+            if ((inst.ClassName === 'Script' || inst.ClassName === 'LocalScript' || inst.ClassName === 'ModuleScript') && this.onOpenScript) {
                 this.onOpenScript(inst);
             }
         });
@@ -976,6 +1219,12 @@ export class ExplorerUI {
                 node.classList.remove('selected');
             }
         });
+    }
+
+    select(inst) {
+        this.setSelected(inst);
+        if (this.onSelect) this.onSelect(inst, [inst]);
+        return inst;
     }
 
     setSelected(inst) {

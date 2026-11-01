@@ -125,7 +125,7 @@ export class PhysicsEngine {
     }
 
     isWeldJoint(inst) {
-        return inst && ['Weld', 'WeldConstraint', 'WeldConstant', 'Motor6D'].includes(inst.ClassName);
+        return inst && (['Weld', 'ManualWeld', 'WeldConstraint', 'WeldConstant', 'Motor6D'].includes(inst.ClassName) || (inst.IsA && inst.IsA('Weld')));
     }
 
     addJoint(joint) {
@@ -185,18 +185,21 @@ export class PhysicsEngine {
         let targetQuaternion;
         let targetPosition;
 
-        if (body1.mass > 0 || body0.mass === 0) {
-            targetBody = body1;
-            targetQuaternion = body0Quaternion.clone().multiply(c0Quaternion).multiply(c1Quaternion.clone().invert());
-            targetPosition = new THREE.Vector3(body0.position.x, body0.position.y, body0.position.z)
-                .add(c0Position.clone().applyQuaternion(body0Quaternion))
-                .sub(c1Position.clone().applyQuaternion(targetQuaternion));
-        } else {
+        const isAccessory = joint.Name === 'AccessoryWeld' || joint.Part0?.Name === 'Handle' || joint.Part0?.Parent?.ClassName === 'Accessory' || joint.Part0?.Parent?.IsA?.('Accessory');
+
+        if (isAccessory || !(body1.mass > 0 || body0.mass === 0)) {
+            // Target is body0 (e.g. Handle attached to body1 Head/Torso)
             targetBody = body0;
             targetQuaternion = body1Quaternion.clone().multiply(c1Quaternion).multiply(c0Quaternion.clone().invert());
             targetPosition = new THREE.Vector3(body1.position.x, body1.position.y, body1.position.z)
                 .add(c1Position.clone().applyQuaternion(body1Quaternion))
                 .sub(c0Position.clone().applyQuaternion(targetQuaternion));
+        } else {
+            targetBody = body1;
+            targetQuaternion = body0Quaternion.clone().multiply(c0Quaternion).multiply(c1Quaternion.clone().invert());
+            targetPosition = new THREE.Vector3(body0.position.x, body0.position.y, body0.position.z)
+                .add(c0Position.clone().applyQuaternion(body0Quaternion))
+                .sub(c1Position.clone().applyQuaternion(targetQuaternion));
         }
 
         targetBody.position.set(targetPosition.x, targetPosition.y, targetPosition.z);
@@ -259,9 +262,10 @@ export class PhysicsEngine {
     addPart(part) {
         if (!this.world || this.bodyMap.has(part)) return;
 
-        // Skip non-root character limbs if character has an alive Humanoid (handled by CharacterController)
-        if (part.Parent && part.Parent.IsA && part.Parent.IsA('Model')) {
-            const hum = part.Parent.FindFirstChild ? part.Parent.FindFirstChild('Humanoid') : null;
+        // Skip non-root character limbs and accessories if character has an alive Humanoid (handled by CharacterController)
+        const charModel = part.FindFirstAncestorOfClass ? part.FindFirstAncestorOfClass('Model') : (part.Parent?.IsA?.('Model') ? part.Parent : null);
+        if (charModel) {
+            const hum = charModel.FindFirstChildOfClass ? charModel.FindFirstChildOfClass('Humanoid') : (charModel.FindFirstChild ? charModel.FindFirstChild('Humanoid') : null);
             if (hum && hum.Health > 0 && part.Name !== 'HumanoidRootPart') {
                 return;
             }
@@ -341,6 +345,7 @@ export class PhysicsEngine {
         if (this.isSyncing) return;
         const body = this.bodyMap.get(part);
         if (!body) return;
+        if (body._isCharacterBody) return;
 
         body.position.set(part.Position.x, part.Position.y, part.Position.z);
         const radX = (part.Orientation.x * Math.PI) / 180;

@@ -36,6 +36,10 @@ export class RibbonUI {
                     <div class="place-title" id="place-title-display">baseplate.cblx</div>
                 </div>
                 <div class="topbar-right">
+                    <button class="topbar-user-btn" id="btn-roblox-account" title="Roblox Account Authorization">
+                        <i data-lucide="shield-check"></i>
+                        <span>Roblox Login</span>
+                    </button>
                     <div class="status-indicator" id="sim-status-badge">
                         <span class="status-dot"></span>
                         <span class="status-label">EDIT MODE</span>
@@ -236,6 +240,10 @@ export class RibbonUI {
                                 <i data-lucide="map-pin"></i>
                                 <span>Spawn</span>
                             </button>
+                            <button class="ribbon-big-btn" id="btn-insert-specialmesh" title="Insert SpecialMesh">
+                                <i data-lucide="box"></i>
+                                <span>Mesh</span>
+                            </button>
                             <button class="ribbon-big-btn" id="btn-insert-pointlight" title="Insert PointLight">
                                 <i data-lucide="lightbulb"></i>
                                 <span>Light</span>
@@ -247,6 +255,10 @@ export class RibbonUI {
                             <button class="ribbon-big-btn" id="btn-insert-localscript" title="Insert Client LocalScript">
                                 <i data-lucide="file-terminal" style="color: #00e5ff;"></i>
                                 <span>LocalScript</span>
+                            </button>
+                            <button class="ribbon-big-btn" id="btn-insert-modulescript" title="Insert ModuleScript">
+                                <i data-lucide="file-cog" style="color: #ffaa00;"></i>
+                                <span>ModuleScript</span>
                             </button>
                         </div>
                         <div class="ribbon-group-label">Gameplay Objects</div>
@@ -438,6 +450,11 @@ export class RibbonUI {
             colorMenu.classList.remove('show');
         });
 
+        // Roblox Account Login Modal
+        this.container.querySelector('#btn-roblox-account')?.addEventListener('click', () => {
+            this.app.robloxAuthUI?.show();
+        });
+
         // Group / Ungroup / Anchor / Duplicate
         this.container.querySelector('#btn-group').addEventListener('click', () => this.app.groupSelected());
         this.container.querySelector('#btn-ungroup').addEventListener('click', () => this.app.ungroupSelected());
@@ -446,9 +463,11 @@ export class RibbonUI {
 
         // Model Tab Inserts
         this.container.querySelector('#btn-insert-spawn').addEventListener('click', () => this.app.spawnLocation());
+        this.container.querySelector('#btn-insert-specialmesh')?.addEventListener('click', () => this.app.createSpecialMesh());
         this.container.querySelector('#btn-insert-pointlight').addEventListener('click', () => this.app.createPointLight());
         this.container.querySelector('#btn-insert-script').addEventListener('click', () => this.app.createScript());
         this.container.querySelector('#btn-insert-localscript').addEventListener('click', () => this.app.createLocalScript());
+        this.container.querySelector('#btn-insert-modulescript')?.addEventListener('click', () => this.app.createModuleScript());
 
         // Simulation controls share one selected mode.
         const selectedMode = () => this.container.querySelector('#sim-mode-select').value;

@@ -166,7 +166,7 @@ export class Instance {
 
     WaitForChild(name, timeout = 5000) {
         const existing = this.FindFirstChild(name);
-        if (existing) return Promise.resolve(existing);
+        if (existing) return existing;
 
         return new Promise((resolve) => {
             let timer = null;
@@ -325,11 +325,17 @@ export class Instance {
         // Subclasses override
     }
 
-    static deserialize(data, generateNewIds = false) {
+    static deserialize(data, generateNewIds = false, idMap = null) {
+        const isRoot = !idMap;
+        if (!idMap) idMap = new Map();
+
         const ctor = Instance.classRegistry.get(data.className) || Instance;
         const inst = new ctor();
         if (!generateNewIds && data.id) {
             inst.id = data.id;
+        }
+        if (data.id) {
+            idMap.set(data.id, inst);
         }
         inst.Name = data.name || data.className;
         inst.archivable = data.archivable !== undefined ? data.archivable : true;
@@ -354,6 +360,9 @@ export class Instance {
                     if (!generateNewIds && childData.id) {
                         existingService.id = childData.id;
                     }
+                    if (childData.id) {
+                        idMap.set(childData.id, existingService);
+                    }
                     if (childData.attributes) {
                         existingService.attributes = new Map(Object.entries(childData.attributes));
                     }
@@ -370,26 +379,44 @@ export class Instance {
                                 const existingSingleton = existingService.FindFirstChild(subChildData.className);
                                 if (existingSingleton) {
                                     if (subChildData.properties) existingSingleton.deserializeProperties(subChildData.properties);
+                                    if (subChildData.id) idMap.set(subChildData.id, existingSingleton);
                                     if (subChildData.children && Array.isArray(subChildData.children)) {
                                         existingSingleton.ClearAllChildren();
                                         for (const deepChildData of subChildData.children) {
-                                            const deepChild = Instance.deserialize(deepChildData, generateNewIds);
+                                            const deepChild = Instance.deserialize(deepChildData, generateNewIds, idMap);
                                             deepChild.Parent = existingSingleton;
                                         }
                                     }
                                     continue;
                                 }
                             }
-                            const subChild = Instance.deserialize(subChildData, generateNewIds);
+                            const subChild = Instance.deserialize(subChildData, generateNewIds, idMap);
                             subChild.Parent = existingService;
                         }
                     }
                 } else {
-                    const child = Instance.deserialize(childData, generateNewIds);
+                    const child = Instance.deserialize(childData, generateNewIds, idMap);
                     child.Parent = inst;
                 }
             }
         }
+
+        if (isRoot) {
+            const all = [inst, ...inst.GetDescendants()];
+            for (const descendant of all) {
+                if (typeof descendant.resolveReferences === 'function') {
+                    descendant.resolveReferences(idMap);
+                }
+            }
+        }
+
         return inst;
     }
+}
+
+if (typeof window !== 'undefined') {
+    window.Instance = Instance;
+}
+if (typeof globalThis !== 'undefined') {
+    globalThis.Instance = Instance;
 }

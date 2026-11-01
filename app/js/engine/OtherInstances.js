@@ -4,7 +4,7 @@
  */
 
 import { Instance } from './Instance.js';
-import { Vector3, Color3, CFrame } from './Math3D.js';
+import { Vector3, Color3, CFrame, nearestEulerYXZ } from './Math3D.js';
 import { Signal } from './Signal.js';
 
 export class Folder extends Instance {
@@ -93,12 +93,13 @@ export class Tool extends Instance {
 export class SpecialMesh extends Instance {
     constructor() {
         super('SpecialMesh');
-        this.meshType = 'Brick';
+        this.meshType = 'Head';
         this.scale = Vector3.one;
         this.offset = Vector3.zero;
         this.meshId = '';
         this.textureId = '';
         this.vertexColor = Vector3.one;
+        this.meshData = null;
     }
 
     get MeshType() { return this.meshType; }
@@ -137,6 +138,12 @@ export class SpecialMesh extends Instance {
         this.Changed.Fire('VertexColor', this.vertexColor);
     }
 
+    get MeshData() { return this.meshData; }
+    set MeshData(value) {
+        this.meshData = value;
+        this.Changed.Fire('MeshData', this.meshData);
+    }
+
     serializeProperties() {
         return {
             meshType: this.meshType,
@@ -144,7 +151,8 @@ export class SpecialMesh extends Instance {
             offset: this.offset.toJSON(),
             meshId: this.meshId,
             textureId: this.textureId,
-            vertexColor: this.vertexColor.toJSON()
+            vertexColor: this.vertexColor.toJSON(),
+            meshData: this.meshData
         };
     }
 
@@ -155,6 +163,193 @@ export class SpecialMesh extends Instance {
         if (props.meshId !== undefined) this.meshId = props.meshId;
         if (props.textureId !== undefined) this.textureId = props.textureId;
         if (props.vertexColor) this.vertexColor = Vector3.fromJSON(props.vertexColor);
+        if (props.meshData !== undefined) this.meshData = props.meshData;
+    }
+}
+
+export class CharacterMesh extends Instance {
+    constructor() {
+        super('CharacterMesh');
+        this.meshId = '';
+        this.bodyPart = 1; // 1 = Torso, 2 = LeftArm, 3 = RightArm, 4 = LeftLeg, 5 = RightLeg
+        this.baseTextureId = '';
+        this.overlayTextureId = '';
+        this.meshData = null;
+    }
+
+    get MeshId() { return this.meshId; }
+    set MeshId(val) {
+        this.meshId = String(val ?? '');
+        this.Changed.Fire('MeshId', this.meshId);
+    }
+
+    get BodyPart() { return this.bodyPart; }
+    set BodyPart(val) {
+        if (typeof val === 'string') {
+            const map = {
+                'head': 0, 'torso': 1,
+                'leftarm': 2, 'left arm': 2,
+                'rightarm': 3, 'right arm': 3,
+                'leftleg': 4, 'left leg': 4,
+                'rightleg': 5, 'right leg': 5
+            };
+            const mapped = map[val.toLowerCase().replace(/_/g, '')];
+            this.bodyPart = mapped !== undefined ? mapped : 1;
+        } else {
+            this.bodyPart = Number(val) || 1;
+        }
+        this.Changed.Fire('BodyPart', this.bodyPart);
+    }
+
+    get BaseTextureId() { return this.baseTextureId; }
+    set BaseTextureId(val) {
+        this.baseTextureId = String(val ?? '');
+        this.Changed.Fire('BaseTextureId', this.baseTextureId);
+    }
+
+    get OverlayTextureId() { return this.overlayTextureId; }
+    set OverlayTextureId(val) {
+        this.overlayTextureId = String(val ?? '');
+        this.Changed.Fire('OverlayTextureId', this.overlayTextureId);
+    }
+
+    get MeshData() { return this.meshData; }
+    set MeshData(val) {
+        this.meshData = val;
+        this.Changed.Fire('MeshData', this.meshData);
+    }
+
+    getTargetPartName() {
+        switch (Number(this.bodyPart)) {
+            case 1: return 'Torso';
+            case 2: return 'Left Arm';
+            case 3: return 'Right Arm';
+            case 4: return 'Left Leg';
+            case 5: return 'Right Leg';
+            default: return 'Torso';
+        }
+    }
+
+    serializeProperties() {
+        return {
+            meshId: this.meshId,
+            bodyPart: this.bodyPart,
+            baseTextureId: this.baseTextureId,
+            overlayTextureId: this.overlayTextureId,
+            meshData: this.meshData
+        };
+    }
+
+    deserializeProperties(props) {
+        if (!props) return;
+        if (props.meshId !== undefined) this.meshId = props.meshId;
+        if (props.bodyPart !== undefined) this.BodyPart = props.bodyPart;
+        if (props.baseTextureId !== undefined) this.baseTextureId = props.baseTextureId;
+        if (props.overlayTextureId !== undefined) this.overlayTextureId = props.overlayTextureId;
+        if (props.meshData !== undefined) this.meshData = props.meshData;
+    }
+}
+
+export class Clothing extends Instance {
+    constructor(className = 'Clothing') {
+        super(className);
+        this.color3 = Color3.fromRGB(255, 255, 255);
+    }
+
+    get Color3() { return this.color3; }
+    set Color3(v) {
+        this.color3 = v instanceof Color3 ? v : Color3.fromRGB(255, 255, 255);
+        this.Changed.Fire('Color3', this.color3);
+    }
+}
+
+export class Shirt extends Clothing {
+    constructor() {
+        super('Shirt');
+        this.shirtTemplate = '';
+    }
+
+    get ShirtTemplate() { return this.shirtTemplate; }
+    set ShirtTemplate(val) {
+        this.shirtTemplate = String(val ?? '');
+        this.Changed.Fire('ShirtTemplate', this.shirtTemplate);
+    }
+
+    serializeProperties() {
+        return {
+            shirtTemplate: this.shirtTemplate,
+            color3: this.color3.toJSON()
+        };
+    }
+
+    deserializeProperties(props) {
+        if (!props) return;
+        if (props.shirtTemplate !== undefined) this.shirtTemplate = props.shirtTemplate;
+        if (props.color3) this.color3 = Color3.fromJSON(props.color3);
+    }
+}
+
+export class Pants extends Clothing {
+    constructor() {
+        super('Pants');
+        this.pantsTemplate = '';
+    }
+
+    get PantsTemplate() { return this.pantsTemplate; }
+    set PantsTemplate(val) {
+        this.pantsTemplate = String(val ?? '');
+        this.Changed.Fire('PantsTemplate', this.pantsTemplate);
+    }
+
+    serializeProperties() {
+        return {
+            pantsTemplate: this.pantsTemplate,
+            color3: this.color3.toJSON()
+        };
+    }
+
+    deserializeProperties(props) {
+        if (!props) return;
+        if (props.pantsTemplate !== undefined) this.pantsTemplate = props.pantsTemplate;
+        if (props.color3) this.color3 = Color3.fromJSON(props.color3);
+    }
+}
+
+export class Accessory extends Instance {
+    constructor() {
+        super('Accessory');
+        this.accessoryType = 'Unknown';
+        this.attachmentPoint = new CFrame();
+    }
+
+    get AccessoryType() { return this.accessoryType; }
+    set AccessoryType(v) {
+        this.accessoryType = String(v || 'Unknown');
+        this.Changed.Fire('AccessoryType', this.accessoryType);
+    }
+
+    get AttachmentPoint() { return this.attachmentPoint; }
+    set AttachmentPoint(v) {
+        this.attachmentPoint = v instanceof CFrame ? v : (v ? CFrame.fromJSON(v) : new CFrame());
+        this.Changed.Fire('AttachmentPoint', this.attachmentPoint);
+    }
+
+    get Handle() {
+        return this.FindFirstChild ? this.FindFirstChild('Handle') : null;
+    }
+
+    serializeProperties() {
+        return {
+            ...super.serializeProperties(),
+            accessoryType: this.accessoryType,
+            attachmentPoint: this.attachmentPoint ? this.attachmentPoint.toJSON() : null
+        };
+    }
+
+    deserializeProperties(props) {
+        super.deserializeProperties(props);
+        if (props.accessoryType !== undefined) this.accessoryType = String(props.accessoryType);
+        if (props.attachmentPoint) this.attachmentPoint = CFrame.fromJSON(props.attachmentPoint);
     }
 }
 
@@ -171,6 +366,14 @@ export class Model extends Instance {
     set PrimaryPart(part) {
         this.primaryPart = part;
         this.Changed.Fire('PrimaryPart', part);
+    }
+
+    GetScale() {
+        return 1.0;
+    }
+
+    ScaleTo(scale) {
+        return 1.0;
     }
 
     MoveTo(targetPosition) {
@@ -250,6 +453,29 @@ export class LocalScript extends Script {
         this._name = 'LocalScript';
         this.source = 'print("Hello world!")\n';
         this.enabled = true;
+    }
+}
+
+export class ModuleScript extends Instance {
+    constructor() {
+        super('ModuleScript');
+        this.source = 'local module = {}\n\nreturn module\n';
+    }
+
+    get Source() { return this.source; }
+    set Source(val) {
+        this.source = String(val);
+        this.Changed.Fire('Source', this.source);
+    }
+
+    serializeProperties() {
+        return {
+            source: this.source
+        };
+    }
+
+    deserializeProperties(props) {
+        if (props.source !== undefined) this.source = props.source;
     }
 }
 
@@ -368,8 +594,169 @@ export class Humanoid extends Instance {
         this.maxHealth = 100;
         this.walkSpeed = 16; // studs per second
         this.jumpPower = 50;
+        this.hipHeight = 0;
+        this.automaticScalingEnabled = true;
         this.Died = new Signal();
         this.HealthChanged = new Signal();
+        this.Running = new Signal();
+        this.Jumping = new Signal();
+        this.Climbing = new Signal();
+        this.FreeFalling = new Signal();
+        this.FallingDown = new Signal();
+        this.GettingUp = new Signal();
+        this.Seated = new Signal();
+        this.PlatformStanding = new Signal();
+        this.Swimming = new Signal();
+        this._activeAnimationTracks = new Set();
+        const animator = new Animator();
+        animator.Parent = this;
+    }
+
+    GetPlayingAnimationTracks() {
+        return this._activeAnimationTracks ? Array.from(this._activeAnimationTracks) : [];
+    }
+
+    AddAccessory(accessory) {
+        if (!accessory) return;
+        const char = this.Parent;
+        if (char) {
+            accessory.Parent = char;
+            Humanoid.attachAccessoryToCharacter(char, accessory);
+        }
+    }
+
+    static attachAccessoryToCharacter(char, accessory) {
+        if (!char || !accessory) return;
+        const handle = accessory.FindFirstChild ? accessory.FindFirstChild('Handle') : null;
+        if (!handle || !handle.IsA || !handle.IsA('BasePart')) return;
+
+        handle.CanCollide = false;
+        handle.Massless = true;
+
+        let weld = handle.FindFirstChild ? handle.FindFirstChild('AccessoryWeld') : null;
+        if (!weld) {
+            const descWelds = accessory.GetDescendants ? accessory.GetDescendants().filter(x => (x.ClassName === 'Weld' || x.ClassName === 'ManualWeld') && (x.Name === 'AccessoryWeld' || x.Part0 === handle)) : [];
+            if (descWelds.length > 0) weld = descWelds[0];
+        }
+
+        if (!weld) {
+            weld = new Weld();
+            weld.Name = 'AccessoryWeld';
+            weld.Parent = handle;
+        }
+
+        weld.Part0 = handle;
+
+        const handleAtt = handle.FindFirstChildOfClass ? handle.FindFirstChildOfClass('Attachment') : null;
+        let matchedPart = null;
+        let matchedAtt = null;
+
+        if (handleAtt) {
+            const parts = char.GetDescendants().filter(x => x.IsA && x.IsA('BasePart') && x !== handle);
+            for (const p of parts) {
+                const att = p.FindFirstChild ? p.FindFirstChild(handleAtt.Name) : null;
+                if (att && att.IsA && att.IsA('Attachment')) {
+                    matchedPart = p;
+                    matchedAtt = att;
+                    break;
+                }
+            }
+        }
+
+        if (matchedPart && matchedAtt) {
+            weld.Part1 = matchedPart;
+            if (!weld.C0 || (weld.C0.position.magnitude === 0 && weld.C0.orientation.magnitude === 0)) {
+                weld.C0 = handleAtt.CFrame ? handleAtt.CFrame.clone() : new CFrame();
+            }
+            if (!weld.C1 || (weld.C1.position.magnitude === 0 && weld.C1.orientation.magnitude === 0)) {
+                weld.C1 = matchedAtt.CFrame ? matchedAtt.CFrame.clone() : new CFrame();
+            }
+        } else if (!weld.Part1 || !char.IsAncestorOf(weld.Part1)) {
+            const defaultTarget = char.FindFirstChild('Head') || char.FindFirstChild('Torso');
+            if (defaultTarget) {
+                weld.Part1 = defaultTarget;
+                if (!weld.C0) weld.C0 = accessory.AttachmentPoint ? accessory.AttachmentPoint.clone() : new CFrame();
+                if (!weld.C1) weld.C1 = new CFrame(0, 0.5, 0);
+            }
+        }
+        weld.Enabled = true;
+    }
+
+    LoadAnimation(animation) {
+        if (!this._activeAnimationTracks) this._activeAnimationTracks = new Set();
+        if (animation instanceof AnimationTrack) return animation;
+
+        if (animation && animation.ClassName === 'KeyframeSequence') {
+            return new AnimationTrack(this, animation, animation.Name);
+        }
+
+        let animId = '';
+        if (animation && animation.AnimationId) animId = animation.AnimationId;
+        else if (typeof animation === 'string') animId = animation;
+
+        const match = String(animId).match(/\d{4,20}/);
+        const numericId = match ? match[0] : null;
+
+        const track = new AnimationTrack(this, null, (animation && animation.Name) || numericId || 'Animation');
+        if (numericId && AnimationTrack._cachedSequences && AnimationTrack._cachedSequences.has(numericId)) {
+            track.setSequence(AnimationTrack._cachedSequences.get(numericId));
+            return track;
+        }
+
+        if (numericId) {
+            const loadBuffer = async () => {
+                let resp = await fetch(`/content/animations/${numericId}.json`);
+                if (resp.ok) return await resp.arrayBuffer();
+                resp = await fetch(`/content/animations/${numericId}.rbxm`);
+                if (resp.ok) return await resp.arrayBuffer();
+                resp = await fetch(`/api/roblox-animation?id=${numericId}`);
+                if (resp.ok) return await resp.arrayBuffer();
+                return null;
+            };
+
+            loadBuffer().then(async buf => {
+                if (!buf) return;
+                const uint8 = new Uint8Array(buf);
+                let seq = null;
+                if (uint8[0] === 123) { // JSON '{'
+                    try {
+                        const json = JSON.parse(new TextDecoder().decode(buf));
+                        const seqData = json.serialized || json;
+                        seq = Instance.deserialize(seqData);
+                    } catch (e) {
+                        console.warn('Could not parse animation JSON', numericId, e);
+                    }
+                } else {
+                    try {
+                        const { parseRbxm } = await import('../studio/RbxmImporter.js');
+                        const parsed = parseRbxm(uint8);
+                        seq = parsed.roots.find(r => r.ClassName === 'KeyframeSequence') || parsed.roots[0];
+                    } catch (e) {
+                        console.warn('Could not parse animation binary RBXM', numericId, e);
+                    }
+                }
+                if (seq) {
+                    if (AnimationTrack._cachedSequences) {
+                        AnimationTrack._cachedSequences.set(numericId, seq);
+                    }
+                    track.setSequence(seq);
+                }
+            }).catch(err => console.warn('Could not load animation asset', numericId, err));
+        }
+
+        return track;
+    }
+
+    get HipHeight() { return this.hipHeight; }
+    set HipHeight(val) {
+        this.hipHeight = (val !== undefined && !isNaN(Number(val))) ? Number(val) : 0;
+        this.Changed.Fire('HipHeight', this.hipHeight);
+    }
+
+    get AutomaticScalingEnabled() { return this.automaticScalingEnabled; }
+    set AutomaticScalingEnabled(val) {
+        this.automaticScalingEnabled = Boolean(val);
+        this.Changed.Fire('AutomaticScalingEnabled', this.automaticScalingEnabled);
     }
 
     get Health() { return this.health; }
@@ -410,7 +797,9 @@ export class Humanoid extends Instance {
             health: this.health,
             maxHealth: this.maxHealth,
             walkSpeed: this.walkSpeed,
-            jumpPower: this.jumpPower
+            jumpPower: this.jumpPower,
+            hipHeight: this.hipHeight,
+            automaticScalingEnabled: this.automaticScalingEnabled
         };
     }
 
@@ -419,8 +808,254 @@ export class Humanoid extends Instance {
         if (props.maxHealth !== undefined) this.maxHealth = props.maxHealth;
         if (props.walkSpeed !== undefined) this.walkSpeed = props.walkSpeed;
         if (props.jumpPower !== undefined) this.jumpPower = props.jumpPower;
+        if (props.hipHeight !== undefined) this.hipHeight = Number(props.hipHeight) || 0;
+        if (props.automaticScalingEnabled !== undefined) this.automaticScalingEnabled = Boolean(props.automaticScalingEnabled);
     }
 }
+
+export class AnimationTrack {
+    static _cachedSequences = new Map();
+
+    static async preloadStandardAnimations() {
+        if (!AnimationTrack._cachedSequences) AnimationTrack._cachedSequences = new Map();
+        const ids = ['180435571', '180426354', '125750702', '180436148', '180436334', '178130996', '182393478', '180435792'];
+        for (const id of ids) {
+            if (AnimationTrack._cachedSequences.has(id)) continue;
+            try {
+                let resp = await fetch(`/content/animations/${id}.json`);
+                let buf = resp.ok ? await resp.arrayBuffer() : null;
+                if (!buf) {
+                    resp = await fetch(`/content/animations/${id}.rbxm`);
+                    if (resp.ok) buf = await resp.arrayBuffer();
+                }
+                if (!buf) continue;
+                const uint8 = new Uint8Array(buf);
+                let seq = null;
+                if (uint8[0] === 123) {
+                    const json = JSON.parse(new TextDecoder().decode(buf));
+                    seq = Instance.deserialize(json.serialized || json);
+                } else {
+                    const { parseRbxm } = await import('../studio/RbxmImporter.js');
+                    const parsed = parseRbxm(uint8);
+                    seq = parsed.roots.find(r => r.ClassName === 'KeyframeSequence') || parsed.roots[0];
+                }
+                if (seq) {
+                    AnimationTrack._cachedSequences.set(id, seq);
+                }
+            } catch (e) {
+                // Ignore background preload error
+            }
+        }
+    }
+
+    constructor(humanoid, sequence = null, name = 'Animation') {
+        this.humanoid = humanoid;
+        this.sequence = sequence;
+        this.name = name || (sequence ? sequence.Name : 'Animation');
+        this.isPlaying = false;
+        this.isStopping = false;
+        this.timePosition = 0;
+        this.speed = 1.0;
+        this.weight = 1.0;
+        this.fadeDuration = 0;
+        this.fadeElapsed = 0;
+        this.fadeStartWeight = 1.0;
+        this.fadeTargetWeight = 1.0;
+        this.priority = sequence ? sequence.Priority : 'Core';
+        this.looped = sequence ? Boolean(sequence.Loop) : true;
+        this.length = sequence ? sequence.Length : 1.0;
+
+        this.KeyframeReached = new Signal();
+        this.DidLoop = new Signal();
+        this.Stopped = new Signal();
+
+        this._samples = [];
+        this._keyframes = [];
+        if (sequence) {
+            this.setSequence(sequence);
+        }
+    }
+
+    setSequence(sequence) {
+        this.sequence = sequence;
+        if (!sequence) return;
+        this.length = Math.max(0.1, sequence.Length || sequence.Duration || 1.0);
+        this.looped = Boolean(sequence.Loop);
+        this._samples = [];
+        const kfs = (sequence.GetKeyframes ? sequence.GetKeyframes() : []).sort((a, b) => a.Time - b.Time);
+        for (const kf of kfs) {
+            const sample = { time: kf.Time, name: kf.Name, poses: new Map() };
+            const poses = kf.GetDescendants ? kf.GetDescendants().filter(i => i.ClassName === 'Pose') : [];
+            for (const pose of poses) {
+                if (pose.CFrame) sample.poses.set(pose.Name, pose.CFrame);
+            }
+            this._samples.push(sample);
+        }
+        if (this._samples.length > 0) {
+            this.length = Math.max(this.length, this._samples[this._samples.length - 1].time, 0.1);
+        }
+    }
+
+    get IsPlaying() { return this.isPlaying; }
+    get Length() { return this.length; }
+    get Looped() { return this.looped; }
+    set Looped(v) { this.looped = Boolean(v); }
+    get Priority() { return this.priority; }
+    set Priority(v) { this.priority = String(v); }
+    get TimePosition() { return this.timePosition; }
+    set TimePosition(v) { this.timePosition = Number(v) || 0; }
+    get Speed() { return this.speed; }
+    set Speed(v) { this.speed = Number(v) || 0; }
+    get Weight() { return this.weight; }
+    set Weight(v) { this.weight = Number(v) || 0; }
+
+    Play(transitionTime = 0.1, weight = 1.0, speed = 1.0) {
+        this.isPlaying = true;
+        this.isStopping = false;
+        this.timePosition = 0;
+        this.speed = Number(speed) || 1.0;
+        const targetW = Math.max(0, Number(weight) || 1.0);
+        const trans = Number(transitionTime);
+        if (trans > 0) {
+            this.fadeDuration = trans;
+            this.fadeElapsed = 0;
+            this.fadeStartWeight = 0.0;
+            this.fadeTargetWeight = targetW;
+            this.weight = 0.0;
+        } else {
+            this.fadeDuration = 0;
+            this.fadeStartWeight = targetW;
+            this.fadeTargetWeight = targetW;
+            this.weight = targetW;
+        }
+        if (this.humanoid && this.humanoid._activeAnimationTracks) {
+            this.humanoid._activeAnimationTracks.add(this);
+        }
+    }
+
+    Stop(transitionTime = 0.1) {
+        if (!this.isPlaying || this.isStopping) return;
+        const trans = Number(transitionTime);
+        if (trans > 0 && this.weight > 0.001) {
+            this.isStopping = true;
+            this.fadeDuration = trans;
+            this.fadeElapsed = 0;
+            this.fadeStartWeight = this.weight;
+            this.fadeTargetWeight = 0.0;
+        } else {
+            this._doStop();
+        }
+    }
+
+    _doStop() {
+        this.isPlaying = false;
+        this.isStopping = false;
+        this.weight = 0;
+        this.fadeDuration = 0;
+        if (this.humanoid && this.humanoid._activeAnimationTracks) {
+            this.humanoid._activeAnimationTracks.delete(this);
+        }
+        this.Stopped.Fire();
+    }
+
+    AdjustSpeed(speed = 1.0) {
+        this.speed = Number(speed) || 0;
+    }
+
+    AdjustWeight(weight = 1.0, transitionTime = 0.1) {
+        const targetW = Math.max(0, Number(weight) || 0);
+        const trans = Number(transitionTime);
+        if (trans > 0) {
+            this.fadeDuration = trans;
+            this.fadeElapsed = 0;
+            this.fadeStartWeight = this.weight;
+            this.fadeTargetWeight = targetW;
+        } else {
+            this.fadeDuration = 0;
+            this.weight = targetW;
+            this.fadeTargetWeight = targetW;
+        }
+    }
+
+    Destroy() {
+        this._doStop();
+    }
+
+    step(dt) {
+        if (!this.isPlaying) return;
+
+        if (this.fadeDuration > 0) {
+            this.fadeElapsed += dt;
+            const progress = Math.min(1.0, this.fadeElapsed / this.fadeDuration);
+            this.weight = this.fadeStartWeight + (this.fadeTargetWeight - this.fadeStartWeight) * progress;
+            if (progress >= 1.0) {
+                this.fadeDuration = 0;
+                this.weight = this.fadeTargetWeight;
+                if (this.isStopping && this.weight <= 0.001) {
+                    this._doStop();
+                    return;
+                }
+            }
+        }
+
+        if (!this._samples.length) return;
+        const prevTime = this.timePosition;
+        this.timePosition += dt * this.speed;
+
+        for (const sample of this._samples) {
+            if (sample.time > prevTime && sample.time <= this.timePosition) {
+                if (sample.name) this.KeyframeReached.Fire(sample.name);
+            }
+        }
+
+        if (this.timePosition >= this.length) {
+            if (this.looped) {
+                this.timePosition = this.timePosition % this.length;
+                this.DidLoop.Fire();
+            } else {
+                this.Stop(0.1);
+            }
+        }
+    }
+
+    poseAt(trackName, time) {
+        const keys = this._samples.filter(s => s.poses.has(trackName));
+        if (!keys.length) return null;
+        if (time <= keys[0].time) return keys[0].poses.get(trackName);
+        if (time >= keys[keys.length - 1].time) return keys[keys.length - 1].poses.get(trackName);
+        const nextIndex = keys.findIndex(s => s.time >= time);
+        if (nextIndex <= 0) return keys[0].poses.get(trackName);
+        const prev = keys[nextIndex - 1];
+        const next = keys[nextIndex];
+        const alpha = (time - prev.time) / Math.max(1e-6, next.time - prev.time);
+        return this._interpolateCFrame(prev.poses.get(trackName), next.poses.get(trackName), alpha);
+    }
+
+    _interpolateCFrame(a, b, alpha) {
+        if (!a) return b ? b.clone() : new CFrame();
+        if (!b) return a ? a.clone() : new CFrame();
+        const pos = a.position.lerp(b.position, alpha);
+        if (typeof THREE !== 'undefined') {
+            const qa = new THREE.Quaternion().setFromEuler(new THREE.Euler(
+                (a.orientation.x * Math.PI) / 180,
+                (a.orientation.y * Math.PI) / 180,
+                (a.orientation.z * Math.PI) / 180,
+                'YXZ'
+            ));
+            const qb = new THREE.Quaternion().setFromEuler(new THREE.Euler(
+                (b.orientation.x * Math.PI) / 180,
+                (b.orientation.y * Math.PI) / 180,
+                (b.orientation.z * Math.PI) / 180,
+                'YXZ'
+            ));
+            const q = qa.slerp(qb, alpha);
+            const euler = new THREE.Euler().setFromQuaternion(q, 'YXZ');
+            return new CFrame(pos, nearestEulerYXZ(euler, a.orientation));
+        }
+        return new CFrame(pos, a.orientation.lerp(b.orientation, alpha));
+    }
+}
+
 
 export class BloomEffect extends Instance {
     constructor() {
@@ -1115,19 +1750,36 @@ export class JointInstance extends Instance {
         if (props.enabled !== undefined) this.enabled = Boolean(props.enabled);
         if (props.c0) this.c0 = CFrame.fromJSON(props.c0);
         if (props.c1) this.c1 = CFrame.fromJSON(props.c1);
-        if (props.part0Id || props.part0Name) {
+        this._pendingPart0Id = props.part0Id || null;
+        this._pendingPart0Name = props.part0Name || null;
+        this._pendingPart1Id = props.part1Id || null;
+        this._pendingPart1Name = props.part1Name || null;
+        if (props.part0Id || props.part0Name || props.part1Id || props.part1Name) {
+            this.resolveReferences();
             setTimeout(() => {
-                const root = this.getRootInstance();
-                const all = [root, ...root.GetDescendants()];
-                this.Part0 = all.find(i => i.id === props.part0Id || i.Name === props.part0Name) || null;
+                if (!this.Part0 || !this.Part1) {
+                    this.resolveReferences();
+                }
             }, 0);
         }
-        if (props.part1Id || props.part1Name) {
-            setTimeout(() => {
-                const root = this.getRootInstance();
-                const all = [root, ...root.GetDescendants()];
-                this.Part1 = all.find(i => i.id === props.part1Id || i.Name === props.part1Name) || null;
-            }, 0);
+    }
+
+    resolveReferences(idMap = null) {
+        const root = this.getRootInstance();
+        const all = root ? [root, ...root.GetDescendants()] : [];
+        if (!this.Part0) {
+            if (this._pendingPart0Id && idMap && idMap.has(this._pendingPart0Id)) {
+                this.Part0 = idMap.get(this._pendingPart0Id);
+            } else if (this._pendingPart0Id || this._pendingPart0Name) {
+                this.Part0 = all.find(i => (this._pendingPart0Id && i.id === this._pendingPart0Id) || (this._pendingPart0Name && i.Name === this._pendingPart0Name)) || null;
+            }
+        }
+        if (!this.Part1) {
+            if (this._pendingPart1Id && idMap && idMap.has(this._pendingPart1Id)) {
+                this.Part1 = idMap.get(this._pendingPart1Id);
+            } else if (this._pendingPart1Id || this._pendingPart1Name) {
+                this.Part1 = all.find(i => (this._pendingPart1Id && i.id === this._pendingPart1Id) || (this._pendingPart1Name && i.Name === this._pendingPart1Name)) || null;
+            }
         }
     }
 }
@@ -1172,6 +1824,18 @@ export class Motor6D extends JointInstance {
         const velocity = Number(v);
         this.maxVelocity = Number.isFinite(velocity) ? Math.max(0, velocity) : 0.05;
         this.Changed.Fire('MaxVelocity', this.maxVelocity);
+    }
+
+    SetDesiredAngle(v) {
+        this.DesiredAngle = v;
+    }
+
+    setDesiredAngle(v) {
+        this.DesiredAngle = v;
+    }
+
+    setCurrentAngle(v) {
+        this.CurrentAngle = v;
     }
 
     serializeProperties() {
@@ -1221,8 +1885,11 @@ export class Keyframe extends Instance {
     }
 
     deserializeProperties(props) {
-        if (props.time !== undefined) this.Time = props.time;
-        if (props.cframe) this.CFrame = CFrame.fromJSON(props.cframe);
+        if (!props) return;
+        const timeVal = props.time !== undefined ? props.time : props.Time;
+        if (timeVal !== undefined) this.Time = timeVal;
+        const cfVal = props.cframe || props.CFrame;
+        if (cfVal) this.CFrame = CFrame.fromJSON(cfVal);
     }
 }
 
@@ -1297,8 +1964,11 @@ export class Pose extends Instance {
     }
 
     deserializeProperties(props) {
-        if (props.cframe) this.CFrame = CFrame.fromJSON(props.cframe);
-        if (props.weight !== undefined) this.Weight = props.weight;
+        if (!props) return;
+        const cfVal = props.cframe || props.CFrame;
+        if (cfVal) this.CFrame = CFrame.fromJSON(cfVal);
+        const weightVal = props.weight !== undefined ? props.weight : props.Weight;
+        if (weightVal !== undefined) this.Weight = weightVal;
     }
 }
 
@@ -1507,12 +2177,164 @@ export class Terrain extends Instance {
     }
 }
 
+export class Animation extends Instance {
+    constructor() {
+        super('Animation');
+        this.animationId = '';
+    }
+
+    get AnimationId() { return this.animationId; }
+    set AnimationId(val) {
+        this.animationId = String(val);
+        this.Changed.Fire('AnimationId', this.animationId);
+    }
+
+    serializeProperties() {
+        return { animationId: this.animationId };
+    }
+
+    deserializeProperties(props) {
+        if (props.animationId !== undefined) this.animationId = props.animationId;
+    }
+}
+
+export class RemoteEvent extends Instance {
+    constructor() {
+        super('RemoteEvent');
+        this.OnServerEvent = new Signal();
+        this.OnClientEvent = new Signal();
+    }
+
+    FireServer(...args) {
+        this.OnServerEvent.Fire(...args);
+    }
+
+    FireClient(player, ...args) {
+        this.OnClientEvent.Fire(...args);
+    }
+
+    FireAllClients(...args) {
+        this.OnClientEvent.Fire(...args);
+    }
+}
+
+export class Attachment extends Instance {
+    constructor() {
+        super('Attachment');
+        this.cframe = new CFrame();
+        this.visible = false;
+    }
+
+    get CFrame() { return this.cframe; }
+    set CFrame(cf) {
+        this.cframe = cf;
+        this.Changed.Fire('CFrame', this.cframe);
+    }
+
+    get Position() { return this.cframe.Position; }
+    get Visible() { return this.visible; }
+    set Visible(v) {
+        this.visible = Boolean(v);
+        this.Changed.Fire('Visible', this.visible);
+    }
+
+    serializeProperties() {
+        return {
+            cframe: this.cframe ? this.cframe.toJSON() : null,
+            visible: this.visible
+        };
+    }
+
+    deserializeProperties(props) {
+        if (props.cframe) this.cframe = CFrame.fromJSON(props.cframe);
+        if (props.visible !== undefined) this.visible = props.visible;
+    }
+}
+
+export class ValueBase extends Instance {
+    constructor(className = 'ValueBase', defaultValue = null) {
+        super(className);
+        this.value = defaultValue;
+    }
+
+    get Value() { return this.value; }
+    set Value(val) {
+        this.value = val;
+        this.Changed.Fire('Value', this.value);
+    }
+
+    serializeProperties() {
+        return { value: this.value };
+    }
+
+    deserializeProperties(props) {
+        if (props.value !== undefined) this.value = props.value;
+    }
+}
+
+export class StringValue extends ValueBase { constructor() { super('StringValue', ''); } }
+export class BoolValue extends ValueBase { constructor() { super('BoolValue', false); } }
+export class NumberValue extends ValueBase { constructor() { super('NumberValue', 0); } }
+export class IntValue extends ValueBase { constructor() { super('IntValue', 0); } }
+export class ObjectValue extends ValueBase { constructor() { super('ObjectValue', null); } }
+
+export class Animator extends Instance {
+    constructor() {
+        super('Animator');
+    }
+    LoadAnimation(animation) {
+        if (this.Parent && this.Parent.LoadAnimation) {
+            return this.Parent.LoadAnimation(animation);
+        }
+        return null;
+    }
+    GetPlayingAnimationTracks() {
+        if (this.Parent && this.Parent.GetPlayingAnimationTracks) {
+            return this.Parent.GetPlayingAnimationTracks();
+        }
+        return [];
+    }
+}
+
+export class BindableFunction extends Instance {
+    constructor() {
+        super('BindableFunction');
+        this.onInvoke = null;
+    }
+
+    get OnInvoke() { return this.onInvoke; }
+    set OnInvoke(fn) { this.onInvoke = fn; }
+
+    Invoke(...args) {
+        if (typeof this.onInvoke === 'function') {
+            return this.onInvoke(...args);
+        }
+        return undefined;
+    }
+}
+
+export class BindableEvent extends Instance {
+    constructor() {
+        super('BindableEvent');
+        this.Event = new Signal();
+    }
+
+    Fire(...args) {
+        this.Event.Fire(...args);
+    }
+}
+
 Instance.register('Folder', Folder);
 Instance.register('Tool', Tool);
 Instance.register('SpecialMesh', SpecialMesh);
+Instance.register('CharacterMesh', CharacterMesh);
+Instance.register('Clothing', Clothing);
+Instance.register('Shirt', Shirt);
+Instance.register('Pants', Pants);
 Instance.register('Model', Model);
 Instance.register('Script', Script);
 Instance.register('LocalScript', LocalScript);
+Instance.register('ModuleScript', ModuleScript);
 Instance.register('PointLight', PointLight);
 Instance.register('SpotLight', SpotLight);
 Instance.register('SurfaceLight', SurfaceLight);
@@ -1530,6 +2352,7 @@ Instance.register('Texture', Texture);
 Instance.register('Sound', Sound);
 Instance.register('JointInstance', JointInstance);
 Instance.register('Weld', Weld);
+Instance.register('ManualWeld', Weld);
 Instance.register('Motor6D', Motor6D);
 Instance.register('Keyframe', Keyframe);
 Instance.register('KeyframeSequence', KeyframeSequence);
@@ -1538,3 +2361,18 @@ Instance.register('WeldConstraint', WeldConstraint);
 Instance.register('WeldConstant', WeldConstant);
 Instance.register('Camera', Camera);
 Instance.register('Terrain', Terrain);
+Instance.register('Animation', Animation);
+Instance.register('RemoteEvent', RemoteEvent);
+Instance.register('Attachment', Attachment);
+Instance.register('StringValue', StringValue);
+Instance.register('BoolValue', BoolValue);
+Instance.register('NumberValue', NumberValue);
+Instance.register('IntValue', IntValue);
+Instance.register('ObjectValue', ObjectValue);
+
+Instance.register('Accessory', Accessory);
+Instance.register('Accoutrement', Accessory);
+Instance.register('AnimationTrack', AnimationTrack);
+Instance.register('Animator', Animator);
+Instance.register('BindableFunction', BindableFunction);
+Instance.register('BindableEvent', BindableEvent);

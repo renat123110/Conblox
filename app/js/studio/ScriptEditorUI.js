@@ -228,7 +228,7 @@ export class ScriptEditorUI {
 
         if (!this.openScripts.has(script)) {
             // Create tab element
-            const iconName = script.ClassName === 'LocalScript' ? 'file-terminal' : 'file-code';
+            const iconName = script.ClassName === 'LocalScript' ? 'file-terminal' : (script.ClassName === 'ModuleScript' ? 'file-cog' : 'file-code');
             const tabEl = document.createElement('div');
             tabEl.className = 'center-tab';
             tabEl.innerHTML = `

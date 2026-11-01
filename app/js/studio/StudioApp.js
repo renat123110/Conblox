@@ -6,7 +6,7 @@
 import { DataModel } from '../engine/DataModel.js';
 import { Instance } from '../engine/Instance.js';
 import { Part, SpawnLocation } from '../engine/BasePart.js';
-import { Model, Folder, Script, LocalScript, PointLight, Sound, Decal, Texture } from '../engine/OtherInstances.js';
+import { Model, Folder, Script, LocalScript, ModuleScript, PointLight, Sound, Decal, Texture, SpecialMesh, CharacterMesh, Shirt, Pants } from '../engine/OtherInstances.js';
 import { Vector3, Color3, CFrame, nearestEulerYXZ } from '../engine/Math3D.js';
 import { PhysicsEngine } from '../engine/PhysicsEngine.js';
 import { CharacterController } from '../engine/CharacterController.js';
@@ -24,35 +24,53 @@ import { ScriptEditorUI } from './ScriptEditorUI.js';
 import { HistoryManager } from './HistoryManager.js';
 import { TemplateManager } from './TemplateManager.js';
 import { SettingsUI } from './SettingsUI.js';
+import { RobloxAuthUI } from './RobloxAuthUI.js';
 import { AnimationEditorUI } from './AnimationEditorUI.js';
 import { BackpackUI } from './BackpackUI.js';
 import { nativeInputManager } from '../engine/NativeInputManager.js';
-import { parseRbxm } from './RbxmImporter.js';
+import { parseRbxm, parseRbxl } from './RbxmImporter.js';
+import { parseRobloxMeshBuffer, parseObjString, fetchRobloxMeshData, extractRobloxAssetId } from '../engine/RobloxMeshParser.js';
 
 function getRobloxAssetId(value) {
     const match = String(value || '').match(/(?:^rbxassetid:\/\/|[?&]id=)(\d+)/i);
     return match ? match[1] : null;
 }
 
-function encodePngDataUrl(buffer) {
+function encodeImageDataUrl(buffer, contentType = 'image/png') {
     const bytes = new Uint8Array(buffer);
     let binary = '';
     const chunkSize = 0x8000;
     for (let offset = 0; offset < bytes.length; offset += chunkSize) {
         binary += String.fromCharCode(...bytes.subarray(offset, offset + chunkSize));
     }
-    return `data:image/png;base64,${btoa(binary)}`;
+    let mime = contentType;
+    if (bytes[0] === 0xFF && bytes[1] === 0xD8) {
+        mime = 'image/jpeg';
+    } else if (bytes[0] === 0x89 && bytes[1] === 0x50) {
+        mime = 'image/png';
+    } else if (bytes[0] === 0x52 && bytes[1] === 0x49 && bytes[8] === 0x57) {
+        mime = 'image/webp';
+    }
+    return `data:${mime};base64,${btoa(binary)}`;
 }
 
 async function embedRobloxTextures(roots) {
     const references = [];
     const assetIds = new Set();
     const visit = (instance) => {
-        const properties = instance.ClassName === 'SpecialMesh'
-            ? ['TextureId']
-            : (instance.ClassName === 'Decal' || instance.ClassName === 'Texture' || instance.ClassName === 'ParticleEmitter'
-                ? ['Texture']
-                : []);
+        if (!instance || instance.ClassName === 'Keyframe' || instance.ClassName === 'Pose') return;
+        let properties = [];
+        if (instance.ClassName === 'SpecialMesh') {
+            properties = ['TextureId'];
+        } else if (instance.ClassName === 'Decal' || instance.ClassName === 'Texture' || instance.ClassName === 'ParticleEmitter') {
+            properties = ['Texture'];
+        } else if (instance.ClassName === 'Shirt') {
+            properties = ['ShirtTemplate'];
+        } else if (instance.ClassName === 'Pants') {
+            properties = ['PantsTemplate'];
+        } else if (instance.ClassName === 'CharacterMesh') {
+            properties = ['BaseTextureId', 'OverlayTextureId'];
+        }
         for (const property of properties) {
             const assetId = getRobloxAssetId(instance[property]);
             if (assetId) {
@@ -73,7 +91,8 @@ async function embedRobloxTextures(roots) {
                 const error = await response.json().catch(() => ({}));
                 throw new Error(error.error || `Roblox asset ${assetId} download failed`);
             }
-            downloaded.set(assetId, encodePngDataUrl(await response.arrayBuffer()));
+            const contentType = response.headers.get('content-type') || 'image/png';
+            downloaded.set(assetId, encodeImageDataUrl(await response.arrayBuffer(), contentType));
         } catch (error) {
             console.warn(`[Studio] Could not download Roblox asset ${assetId}:`, error);
             failedAssetIds.push(assetId);
@@ -84,6 +103,34 @@ async function embedRobloxTextures(roots) {
         if (downloaded.has(assetId)) instance[property] = downloaded.get(assetId);
     }
     return { embeddedCount: downloaded.size, failedAssetIds };
+}
+
+async function embedRobloxMeshes(roots) {
+    const meshes = [];
+    const visit = (instance) => {
+        if (!instance || instance.ClassName === 'Keyframe' || instance.ClassName === 'Pose') return;
+        if ((instance.ClassName === 'SpecialMesh' || instance.ClassName === 'CharacterMesh') && instance.MeshId && !instance.MeshData) {
+            const assetId = extractRobloxAssetId(instance.MeshId);
+            if (assetId) meshes.push({ instance, assetId });
+        }
+        for (const child of instance.GetChildren()) visit(child);
+    };
+    for (const root of roots) visit(root);
+
+    let embeddedCount = 0;
+    await Promise.all(meshes.map(async ({ instance, assetId }) => {
+        try {
+            const data = await fetchRobloxMeshData(assetId);
+            if (data && data.geometry) {
+                instance.MeshData = data.geometry;
+                if (instance.ClassName === 'SpecialMesh' && instance.MeshType !== 'FileMesh') instance.MeshType = 'FileMesh';
+                embeddedCount++;
+            }
+        } catch (err) {
+            console.warn(`[Studio] Could not embed Roblox mesh ${assetId}:`, err);
+        }
+    }));
+    return { embeddedCount };
 }
 
 export class StudioApp {
@@ -102,6 +149,7 @@ export class StudioApp {
         this.scriptRunner = null;
         this.historyManager = null;
         this.settingsUI = null;
+        this.robloxAuthUI = null;
         this.animationEditorUI = null;
         this.backpackUI = null;
         this.starterCharacterPromise = null;
@@ -192,6 +240,9 @@ export class StudioApp {
         // 8. Ribbon UI
         const ribbonContainer = document.getElementById('studio-ribbon-container');
         this.ribbonUI = new RibbonUI(ribbonContainer, this);
+
+        // 8.5. Roblox Account Authentication UI
+        this.robloxAuthUI = new RobloxAuthUI(this);
 
         // 9. Sound, Physics & Simulation
         this.soundEngine = new SoundEngine();
@@ -566,6 +617,12 @@ export class StudioApp {
                 } else if (this.viewport) {
                     this.viewport.setSelectedPart(inst);
                 }
+            } else if (inst && inst.ClassName === 'SpecialMesh' && inst.Parent && inst.Parent.IsA && inst.Parent.IsA('BasePart')) {
+                if (this.viewport && this.viewport.setSelectedParts) {
+                    this.viewport.setSelectedParts([inst.Parent]);
+                } else if (this.viewport) {
+                    this.viewport.setSelectedPart(inst.Parent);
+                }
             } else if (this.viewport) {
                 if (this.viewport.setSelectedParts) {
                     this.viewport.setSelectedParts([]);
@@ -578,6 +635,8 @@ export class StudioApp {
 
         if (inst && inst.IsA && (inst.IsA('BasePart') || inst.IsA('Model'))) {
             this.gizmoManager.attachTo(inst, multiInstances);
+        } else if (inst && inst.ClassName === 'SpecialMesh' && inst.Parent && inst.Parent.IsA && inst.Parent.IsA('BasePart')) {
+            this.gizmoManager.attachTo(inst.Parent);
         } else if (multiInstances && multiInstances.some(i => i && i.IsA && (i.IsA('BasePart') || i.IsA('Model')))) {
             const firstPartOrModel = multiInstances.find(i => i && i.IsA && (i.IsA('BasePart') || i.IsA('Model')));
             this.gizmoManager.attachTo(firstPartOrModel, multiInstances);
@@ -694,6 +753,16 @@ export class StudioApp {
         this.historyManager.recordState();
         this.openScriptEditor(script);
         this.outputUI.log('info', `Created LocalScript in ${script.Parent.Name}`);
+        return script;
+    }
+
+    createModuleScript(parent = null) {
+        const script = new ModuleScript();
+        script.Parent = parent || (this.selectedInstance || this.dataModel.ReplicatedStorage || this.dataModel.Workspace);
+        this.selectInstance(script);
+        this.historyManager.recordState();
+        this.openScriptEditor(script);
+        this.outputUI.log('info', `Created ModuleScript in ${script.Parent.Name}`);
         return script;
     }
 
@@ -946,10 +1015,11 @@ export class StudioApp {
 
     // SIMULATION
     isCharacterSimulation() {
-        return this.simulationState === 'Test' || this.simulationState === 'TestHere';
+        return this.simulationState === 'Test' || this.simulationState === 'TestHere' || this.simulationState === 'Play';
     }
 
     startSimulation(mode = 'Test') {
+        if (mode === 'Play') mode = 'Test';
         if (this.simulationState !== 'Edit' || this.isStartingSimulation) return;
         if (mode !== 'Test' && mode !== 'TestHere') {
             this._startSimulation(mode);
@@ -1012,7 +1082,7 @@ export class StudioApp {
         this.scriptRunner.start();
 
         // 4. If Play mode: spawn player character
-        if (mode === 'Test' || mode === 'TestHere') {
+        if (mode === 'Test' || mode === 'TestHere' || mode === 'Play') {
             this.viewport.setPlayMode(true);
             this.gizmoManager.detach();
             this.characterController.spawn(mode === 'TestHere' ? this.viewport.cameraPos : null);
@@ -1446,10 +1516,20 @@ export class StudioApp {
     promptLoadPlace() {
         const input = document.createElement('input');
         input.type = 'file';
-        input.accept = '.cblx,.json';
+        input.accept = '.cblx,.json,.rbxl';
         input.onchange = (e) => {
             const file = e.target.files[0];
             if (!file) return;
+
+            const ext = file.name.split('.').pop().toLowerCase();
+            if (ext === 'rbxl') {
+                const reader = new FileReader();
+                reader.onload = (ev) => {
+                    this.openRbxlPlace(ev.target.result, file.name);
+                };
+                reader.readAsArrayBuffer(file);
+                return;
+            }
 
             const reader = new FileReader();
             reader.onload = (ev) => {
@@ -1479,11 +1559,17 @@ export class StudioApp {
     }
 
     async importRbxmFile(file) {
+        if (file.name.toLowerCase().endsWith('.rbxl')) {
+            const buffer = await file.arrayBuffer();
+            this.openRbxlPlace(buffer, file.name);
+            return;
+        }
         try {
             const buffer = new Uint8Array(await file.arrayBuffer());
             const { roots, instanceCount } = parseRbxm(buffer);
             if (roots.length === 0) throw new Error('The model contains no instances');
             const { embeddedCount, failedAssetIds } = await embedRobloxTextures(roots);
+            await embedRobloxMeshes(roots);
 
             const selected = this.selectedInstance;
             const parent = selected && selected.IsA && (selected.IsA('Model') || selected.IsA('Folder'))
@@ -1524,8 +1610,13 @@ export class StudioApp {
                 try {
                     const response = await fetch(route);
                     if (!response.ok) continue;
-                    const placeData = await response.json();
-                    this.loadPlaceData(placeData, filename);
+                    if (filename.toLowerCase().endsWith('.rbxl')) {
+                        const buffer = await response.arrayBuffer();
+                        await this.openRbxlPlace(buffer, filename);
+                    } else {
+                        const placeData = await response.json();
+                        this.loadPlaceData(placeData, filename);
+                    }
                     this.outputUI.log('info', `Loaded ${filename} from places`);
                     loaded = true;
                     break;
@@ -1535,9 +1626,114 @@ export class StudioApp {
             }
             if (loaded) break;
         }
+        if (params.get('import_rbxm')) {
+            const rbxmName = params.get('import_rbxm');
+            try {
+                const resp = await fetch(rbxmName);
+                if (resp.ok) {
+                    const blob = await resp.blob();
+                    const file = new File([blob], rbxmName.split('/').pop(), { type: 'application/octet-stream' });
+                    await this.importRbxmFile(file);
+                    window.__IMPORT_RBXM_DONE = true;
+                }
+            } catch (err) {
+                console.warn('[Studio] Auto import_rbxm failed:', err);
+            }
+        }
         if (params.get('play') === '1') {
             document.body.classList.add('game-player');
             this.startSimulation('Test');
+        }
+    }
+
+    async openRbxlPlace(buffer, filename = 'Place.rbxl') {
+        this.stopSimulation();
+        try {
+            const { dataModel, instanceCount } = parseRbxl(buffer);
+            this.dataModel.Destroy();
+            this.dataModel = dataModel;
+            this.currentPlaceName = filename;
+
+            const titleEl = document.getElementById('place-title-display');
+            if (titleEl) {
+                titleEl.textContent = this.currentPlaceName;
+            }
+
+            // Ensure CurrentCamera is properly linked
+            if (this.dataModel.Workspace) {
+                let cam = this.dataModel.Workspace.FindFirstChild('Camera');
+                if (!cam) {
+                    const CameraClass = Instance.classRegistry ? Instance.classRegistry.get('Camera') : null;
+                    if (CameraClass) {
+                        cam = new CameraClass();
+                        cam.Name = 'Camera';
+                        cam.Parent = this.dataModel.Workspace;
+                    }
+                }
+                if (cam) {
+                    this.dataModel.Workspace.CurrentCamera = cam;
+                }
+            }
+
+            this.viewport.dataModel = this.dataModel;
+            if (this.viewport.bindWorkspaceHierarchy) this.viewport.bindWorkspaceHierarchy();
+            if (this.viewport.bindLightingAndAtmosphereHierarchy) this.viewport.bindLightingAndAtmosphereHierarchy();
+            if (this.viewport.syncLightingAndEffects) this.viewport.syncLightingAndEffects();
+
+            this.explorerUI.dataModel = this.dataModel;
+            this.propertiesUI.dataModel = this.dataModel;
+            this.physicsEngine.dataModel = this.dataModel;
+            this.characterController.dataModel = this.dataModel;
+            this.characterController.viewport = this.viewport;
+            this.scriptRunner.dataModel = this.dataModel;
+
+            if (this.historyManager) {
+                this.historyManager.dataModel = this.dataModel;
+                try {
+                    if (typeof this.historyManager.clear === 'function') {
+                        this.historyManager.clear();
+                    } else {
+                        this.historyManager.history = [];
+                        this.historyManager.currentIndex = -1;
+                    }
+                    this.historyManager.recordState();
+                } catch (err) {
+                    console.warn('[StudioApp] HistoryManager reset error:', err);
+                }
+            }
+
+            if (this.dataModel.RunService) {
+                this.dataModel.RunService.setStudioApp(this);
+            }
+
+            this.viewport.syncAllParts();
+            this.explorerUI.render();
+            this.selectInstance(null);
+
+            const spawnOrPart = this.dataModel.Workspace.FindFirstChildOfClass('SpawnLocation')
+                || this.dataModel.Workspace.GetDescendants().find(i => i.IsA && i.IsA('BasePart') && i.Name !== 'Baseplate');
+            if (spawnOrPart && this.viewport.focusOnPart) {
+                this.viewport.focusOnPart(spawnOrPart);
+            }
+
+            this.outputUI.log('info', `Opened RBXL place: ${filename} (${instanceCount} instances)`);
+
+            embedRobloxTextures(this.dataModel.GetChildren()).then(({ embeddedCount }) => {
+                if (embeddedCount > 0) {
+                    this.outputUI.log('info', `Embedded ${embeddedCount} Roblox textures into place`);
+                    this.viewport.syncAllParts();
+                }
+            }).catch(() => {});
+
+            embedRobloxMeshes(this.dataModel.GetChildren()).then(({ embeddedCount }) => {
+                if (embeddedCount > 0) {
+                    this.outputUI.log('info', `Embedded ${embeddedCount} Roblox meshes into place`);
+                    this.viewport.syncAllParts();
+                }
+            }).catch(() => {});
+        } catch (error) {
+            this.outputUI.log('error', `Failed to open RBXL place ${filename}: ${error.message}`);
+            alert(`Failed to open RBXL place: ${error.message}`);
         }
     }
 
@@ -1735,6 +1931,43 @@ export class StudioApp {
             return;
         }
 
+        if (ext === 'rbxl') {
+            const reader = new FileReader();
+            reader.onload = (ev) => {
+                this.openRbxlPlace(ev.target.result, name);
+            };
+            reader.readAsArrayBuffer(file);
+            return;
+        }
+
+        if (ext === 'mesh') {
+            const reader = new FileReader();
+            reader.onload = (ev) => {
+                try {
+                    const geometry = parseRobloxMeshBuffer(ev.target.result);
+                    this.createMeshPartFromGeometry(geometry, name.replace(/\.mesh$/i, ''));
+                } catch (err) {
+                    this.outputUI.log('error', `Failed to load dropped mesh ${name}: ${err.message}`);
+                }
+            };
+            reader.readAsArrayBuffer(file);
+            return;
+        }
+
+        if (ext === 'obj') {
+            const reader = new FileReader();
+            reader.onload = (ev) => {
+                try {
+                    const geometry = parseObjString(ev.target.result);
+                    this.createMeshPartFromGeometry(geometry, name.replace(/\.obj$/i, ''));
+                } catch (err) {
+                    this.outputUI.log('error', `Failed to load dropped OBJ ${name}: ${err.message}`);
+                }
+            };
+            reader.readAsText(file);
+            return;
+        }
+
         // 1. Audio files: mp3, wav, ogg, m4a, aac, flac
         const isAudio = mime.startsWith('audio/') || ['mp3', 'wav', 'ogg', 'm4a', 'aac', 'flac'].includes(ext);
         if (isAudio) {
@@ -1834,6 +2067,30 @@ export class StudioApp {
         }
     }
 
+    createMeshPartFromGeometry(geometry, baseName = 'MeshPart') {
+        const PartClass = Instance.classRegistry ? Instance.classRegistry.get('Part') : null;
+        const SpecialMeshClass = Instance.classRegistry ? Instance.classRegistry.get('SpecialMesh') : null;
+        if (!PartClass || !SpecialMeshClass) return;
+
+        const part = new PartClass();
+        part.Name = baseName;
+        part.Size = new Vector3(2, 2, 2);
+        part.Position = new Vector3(0, 5, 0);
+
+        const mesh = new SpecialMeshClass();
+        mesh.Name = 'Mesh';
+        mesh.MeshType = 'FileMesh';
+        mesh.MeshData = geometry;
+        mesh.Parent = part;
+
+        part.Parent = this.dataModel.Workspace;
+        this.selectInstance(part);
+        this.viewport.syncPartMesh(part);
+        if (this.viewport.focusOnPart) this.viewport.focusOnPart(part);
+        this.historyManager.recordState();
+        this.outputUI.log('info', `Imported Mesh: "${baseName}" (${geometry.vertexCount} vertices, ${geometry.faceCount} faces, embedded into .cblx)`);
+    }
+
     createSound(parent = null) {
         const sound = new Sound();
         sound.Parent = parent || (this.selectedInstance || this.dataModel.SoundService || this.dataModel.Workspace);
@@ -1861,5 +2118,67 @@ export class StudioApp {
         this.historyManager.recordState();
         this.outputUI.log('info', `Created Texture on ${texture.Parent.Name}.${texture.Face}`);
         return texture;
+    }
+
+    createSpecialMesh(parent = null) {
+        let targetPart = null;
+        if (parent && parent.IsA && parent.IsA('BasePart')) {
+            targetPart = parent;
+        } else if (this.selectedInstance && this.selectedInstance.IsA && this.selectedInstance.IsA('BasePart')) {
+            targetPart = this.selectedInstance;
+        } else {
+            targetPart = new Part();
+            targetPart.Name = 'Part';
+            targetPart.Parent = (parent && parent.IsA && parent.IsA('Instance')) ? parent : this.dataModel.Workspace;
+            this.viewport.syncPartMesh(targetPart);
+        }
+
+        const mesh = new SpecialMesh();
+        mesh.Name = 'Mesh';
+        mesh.MeshType = 'Head';
+        mesh.Parent = targetPart;
+
+        this.selectInstance(mesh);
+        this.viewport.rebuildPartMesh(targetPart);
+        this.historyManager.recordState();
+        this.outputUI.log('info', `Created SpecialMesh in ${targetPart.Name}`);
+        return mesh;
+    }
+
+    createCharacterMesh(parent = null) {
+        let target = parent || this.selectedInstance || this.dataModel.Workspace;
+        const cm = new CharacterMesh();
+        cm.Name = 'CharacterMesh';
+        cm.BodyPart = 'Torso';
+        cm.Parent = target;
+        this.selectInstance(cm);
+        this.viewport.handleCharacterChildChange?.(target);
+        this.historyManager.recordState();
+        this.outputUI.log('info', `Created CharacterMesh in ${target.Name}`);
+        return cm;
+    }
+
+    createShirt(parent = null) {
+        let target = parent || this.selectedInstance || this.dataModel.Workspace;
+        const sh = new Shirt();
+        sh.Name = 'Shirt';
+        sh.Parent = target;
+        this.selectInstance(sh);
+        this.viewport.handleCharacterChildChange?.(target);
+        this.historyManager.recordState();
+        this.outputUI.log('info', `Created Shirt in ${target.Name}`);
+        return sh;
+    }
+
+    createPants(parent = null) {
+        let target = parent || this.selectedInstance || this.dataModel.Workspace;
+        const p = new Pants();
+        p.Name = 'Pants';
+        p.Parent = target;
+        this.selectInstance(p);
+        this.viewport.handleCharacterChildChange?.(target);
+        this.historyManager.recordState();
+        this.outputUI.log('info', `Created Pants in ${target.Name}`);
+        return p;
     }
 }

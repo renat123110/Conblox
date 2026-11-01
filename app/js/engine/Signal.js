@@ -17,6 +17,10 @@ export class Connection {
             this.signal = null;
         }
     }
+
+    disconnect() {
+        this.Disconnect();
+    }
 }
 
 export class Signal {
@@ -31,6 +35,10 @@ export class Signal {
         const conn = new Connection(this, handler);
         this.connections.push(conn);
         return conn;
+    }
+
+    connect(handler) {
+        return this.Connect(handler);
     }
 
     _disconnect(conn) {

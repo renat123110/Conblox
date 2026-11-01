@@ -45,6 +45,7 @@ def build_exe(place_data, output_dir):
             "--workpath", str(temp_path / "work"), "--specpath", str(temp_path),
             "--add-data", f"{APP_DIR};app", "--add-data", f"{bundled_place};places",
             "--add-data", f"{ROOT / 'StarterCharacter.rbxm'};.",
+            "--add-data", f"{ROOT / 'mesh_converter.py'};.",
             str(entry_point),
         ]
         try:
